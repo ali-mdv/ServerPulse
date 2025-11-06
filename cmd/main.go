@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
+	"server-monitoring/internal/routes"
 	"server-monitoring/pkg/config"
-
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	cfg := config.Load()
 
-	srv := gin.Default()
+	srv := routes.Setup()
 	srv.Run(fmt.Sprintf(":%d", cfg.Port))
 }
