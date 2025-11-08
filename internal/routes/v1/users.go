@@ -16,5 +16,6 @@ func RegisterUserRoutes(r *gin.RouterGroup) {
 	api := r.Group("/users")
 	{
 		api.GET("", handler.GetUsers)
+		api.POST("", handler.CreateUser)
 	}
 }
