@@ -48,3 +48,4 @@ go.work
 
 ### Custom ###
 .env
+/tmp
