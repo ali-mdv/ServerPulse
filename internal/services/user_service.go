@@ -16,7 +16,9 @@ type UserService interface {
 	UsersList() (*[]models.User, error)
 	CreateUser(dtos.CreateUserDTO) (*models.User, error)
 	FindUserByID(string) (*models.User, error)
+	FindUserByEmail(string) (*models.User, error)
 	UpdateUserByID(string, dtos.UpdateUserDTO) (*models.User, error)
+	GenerateHash(string) (*string, error)
 }
 
 type userService struct {
@@ -70,16 +72,28 @@ func (s *userService) FindUserByID(userID string) (*models.User, error) {
 	return &user, nil
 }
 
-func (s *userService) CreateUser(dto dtos.CreateUserDTO) (*models.User, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(dto.Password), bcrypt.DefaultCost)
+func (s *userService) FindUserByEmail(userEmail string) (*models.User, error) {
+	var user models.User
+	err := s.db.FindOne(context.TODO(), bson.D{
+		{Key: "email", Value: userEmail},
+	}).Decode(&user)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (s *userService) CreateUser(dto dtos.CreateUserDTO) (*models.User, error) {
+	hashedPassword, err := s.GenerateHash(dto.Password)
+	if err != nil {
+		return nil, err
 	}
 
 	user := models.User{
 		ID:        bson.NewObjectID(),
 		Username:  dto.Username,
-		Password:  string(hash),
+		Password:  *hashedPassword,
 		Email:     dto.Email,
 		UpdatedAt: time.Now(),
 		CreatedAt: time.Now(),
@@ -107,11 +121,11 @@ func (s *userService) UpdateUserByID(userID string, dto dtos.UpdateUserDTO) (*mo
 		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "email", Value: *dto.Email}}})
 	}
 	if dto.Password != nil {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*dto.Password), bcrypt.DefaultCost)
+		hashedPassword, err := s.GenerateHash(*dto.Password)
 		if err != nil {
-			return nil, fmt.Errorf("failed to hash password: %w", err)
+			return nil, err
 		}
-		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "password", Value: string(hashedPassword)}}})
+		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "password", Value: *hashedPassword}}})
 	}
 
 	if len(update) != 0 {
@@ -123,4 +137,13 @@ func (s *userService) UpdateUserByID(userID string, dto dtos.UpdateUserDTO) (*mo
 
 	user, _ := s.FindUserByID(userID)
 	return user, nil
+}
+
+func (s *userService) GenerateHash(password string) (*string, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+	hash := string(hashedPassword)
+	return &hash, nil
 }
