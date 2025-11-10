@@ -2,6 +2,7 @@ package v1
 
 import (
 	"server-monitoring/internal/handlers"
+	"server-monitoring/internal/middlewares"
 	"server-monitoring/internal/services"
 	database "server-monitoring/pkg/mongo"
 
@@ -14,6 +15,8 @@ func RegisterUserRoutes(r *gin.RouterGroup) {
 	handler := handlers.NewUserHandler(service)
 
 	api := r.Group("/users")
+	api.Use(middlewares.AuthMiddleware())
+
 	{
 		api.GET("", handler.GetUsers)
 		api.POST("", handler.CreateUser)
