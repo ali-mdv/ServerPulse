@@ -8,6 +8,7 @@ func RegisterV1Routes(r *gin.RouterGroup) {
 	api := r.Group("/v1")
 
 	{
+		RegisterAuthRoutes(api)
 		RegisterUserRoutes(api)
 		RegisterReportRoutes(api)
 	}
