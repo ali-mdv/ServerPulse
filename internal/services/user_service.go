@@ -5,6 +5,7 @@ import (
 	"server-monitoring/internal/dtos"
 	"server-monitoring/internal/models"
 	"server-monitoring/internal/repository"
+	"server-monitoring/pkg/errors"
 	database "server-monitoring/pkg/mongo"
 
 	"golang.org/x/crypto/bcrypt"
@@ -42,6 +43,11 @@ func (s *userService) FindUserByEmail(userEmail string) (*models.User, error) {
 }
 
 func (s *userService) CreateUser(dto dtos.CreateUserDTO) (*models.User, error) {
+	user, _ := s.repo.FindUserByEmail(dto.Email)
+	if user != nil {
+		return nil, errors.ErrConflict
+	}
+
 	hashedPassword, err := s.GenerateHash(dto.Password)
 	if err != nil {
 		return nil, err
@@ -60,13 +66,7 @@ func (s *userService) UpdateUserByID(userID string, dto dtos.UpdateUserDTO) (*mo
 		dto.Password = hashedPassword
 	}
 
-	_, err := s.repo.UpdateUserByID(userID, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	user, _ := s.FindUserByID(userID)
-	return user, nil
+	return s.repo.UpdateUserByID(userID, dto)
 }
 
 func (s *userService) GenerateHash(password string) (*string, error) {

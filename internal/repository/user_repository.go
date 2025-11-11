@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"server-monitoring/internal/dtos"
 	"server-monitoring/internal/models"
+	"server-monitoring/pkg/errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -128,6 +129,11 @@ func (r *userRepository) UpdateUserByID(userID string, data dtos.UpdateUserDTO) 
 		return nil, fmt.Errorf("invalid user ID: %v", err)
 	}
 
+	user, _ := r.FindUserByEmail(*data.Email)
+	if user != nil && user.ID != objectID {
+		return nil, errors.ErrConflict
+	}
+
 	update := bson.D{}
 
 	if data.Email != nil {
@@ -144,6 +150,6 @@ func (r *userRepository) UpdateUserByID(userID string, data dtos.UpdateUserDTO) 
 		}
 	}
 
-	user, _ := r.FindUserByID(userID)
+	user, _ = r.FindUserByID(userID)
 	return user, nil
 }
