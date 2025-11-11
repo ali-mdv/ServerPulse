@@ -10,6 +10,7 @@ func RegisterV1Routes(r *gin.RouterGroup) {
 	{
 		RegisterAuthRoutes(api)
 		RegisterUserRoutes(api)
+		RegisterDockerRoutes(api)
 		RegisterReportRoutes(api)
 	}
 
