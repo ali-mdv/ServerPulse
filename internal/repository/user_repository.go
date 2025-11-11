@@ -43,12 +43,6 @@ func (r *userRepository) setupIndexes() {
 				SetUnique(true).
 				SetName("unique_email"),
 		},
-		{
-			Keys: bson.D{{Key: "username", Value: 1}},
-			Options: options.Index().
-				SetUnique(true).
-				SetName("unique_username"),
-		},
 	}
 
 	_, err := r.Collection.Indexes().CreateMany(ctx, indexes)
@@ -116,7 +110,6 @@ func (r *userRepository) FindUserByEmail(userEmail string) (*models.User, error)
 func (r *userRepository) CreateUser(dto dtos.CreateUserDTO) (*models.User, error) {
 	user := models.User{
 		ID:        bson.NewObjectID(),
-		Username:  dto.Username,
 		Password:  dto.Password,
 		Email:     dto.Email,
 		UpdatedAt: time.Now(),
@@ -137,9 +130,6 @@ func (r *userRepository) UpdateUserByID(userID string, data dtos.UpdateUserDTO) 
 
 	update := bson.D{}
 
-	if data.Username != nil {
-		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "username", Value: *data.Username}}})
-	}
 	if data.Email != nil {
 		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "email", Value: *data.Email}}})
 	}
