@@ -3,14 +3,12 @@ package v1
 import (
 	"server-monitoring/internal/handlers"
 	"server-monitoring/internal/services"
-	database "server-monitoring/pkg/mongo"
 
 	"github.com/gin-gonic/gin"
 )
 
 func RegisterAuthRoutes(r *gin.RouterGroup) {
-	db := database.GetCollection("server_monitoring", "users")
-	userService := services.NewUserService(db)
+	userService := services.NewUserService("server_monitoring")
 	service := services.NewAuthService(userService)
 	handler := handlers.NewAuthHandler(service)
 
