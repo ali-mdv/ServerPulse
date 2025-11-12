@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"server-monitoring/internal/models"
 	"strings"
@@ -90,13 +92,46 @@ func (s *dockerService) ImagesList(all bool) ([]models.DockerImage, error) {
 	return images, err
 }
 
+func (s *dockerService) ContainerStats(c container.Summary) *models.DockerContainerUsage {
+	stats, err := s.client.ContainerStats(ctx, c.ID, false)
+	if err != nil {
+		fmt.Printf("Error getting stats for %s: %v\n", c.ID[:12], err)
+		return nil
+	}
+	defer stats.Body.Close()
+
+	var statsJson container.StatsResponse
+	if err := json.NewDecoder(stats.Body).Decode(&statsJson); err != nil && err != io.EOF {
+		fmt.Printf("Decode error for %s: %v\n", c.ID[:12], err)
+		return nil
+	}
+
+	// Calculate CPU percentage
+	cpuDelta := float64(statsJson.CPUStats.CPUUsage.TotalUsage - statsJson.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(statsJson.CPUStats.SystemUsage - statsJson.PreCPUStats.SystemUsage)
+	cpuPercent := 0.0
+	if systemDelta > 0.0 && cpuDelta > 0.0 {
+		cpuPercent = (cpuDelta / systemDelta) * float64(len(statsJson.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+	}
+
+	memUsage := statsJson.MemoryStats.Usage
+	memLimit := statsJson.MemoryStats.Limit
+	memPercent := float64(memUsage) / float64(memLimit) * 100.0
+
+	return &models.DockerContainerUsage{
+		CpuPercent: fmt.Sprintf("%.2f%%", cpuPercent),
+		MemPercent: fmt.Sprintf("%.2f%%", memPercent),
+		MemUsage:   s.humanSize(int64(memUsage)),
+	}
+}
+
 func (s *dockerService) ContainersList(all bool) ([]models.DockerContainer, error) {
 	containersSummary, err := s.client.ContainerList(ctx, container.ListOptions{All: all})
 	if err != nil {
 		return nil, err
 	}
 
-	containers := make([]models.DockerContainer, 0, len(containersSummary))
+	containersInfo := make([]models.DockerContainer, 0, len(containersSummary))
 
 	for _, summary := range containersSummary {
 		containerID := summary.ID
@@ -119,7 +154,7 @@ func (s *dockerService) ContainersList(all bool) ([]models.DockerContainer, erro
 			port = fmt.Sprintf("%d:%d", hostPort, dockerPort)
 		}
 
-		container := models.DockerContainer{
+		containerInfo := models.DockerContainer{
 			ID:        containerID,
 			Name:      containerName,
 			Image:     summary.Image,
@@ -129,7 +164,12 @@ func (s *dockerService) ContainersList(all bool) ([]models.DockerContainer, erro
 			CreatedAt: time.Unix(summary.Created, 0).UTC(),
 		}
 
-		containers = append(containers, container)
+		if summary.State == container.StateRunning {
+			usage := s.ContainerStats(summary)
+			containerInfo.Usage = *usage
+		}
+
+		containersInfo = append(containersInfo, containerInfo)
 	}
-	return containers, nil
+	return containersInfo, nil
 }

@@ -1,6 +1,16 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/docker/docker/api/types/container"
+)
+
+type DockerContainerUsage struct {
+	CpuPercent string `json:"cpuPercent"`
+	MemPercent string `json:"memPercent"`
+	MemUsage   string `json:"memUsage"`
+}
 
 type DockerImage struct {
 	ID         string    `json:"id"`
@@ -11,11 +21,12 @@ type DockerImage struct {
 }
 
 type DockerContainer struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Image     string    `json:"image"`
-	Port      string    `json:"port"`
-	State     string    `json:"state"`
-	UpTime    string    `json:"upTime"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID        string                   `json:"id"`
+	Name      string                   `json:"name"`
+	Image     string                   `json:"image"`
+	Port      string                   `json:"port"`
+	State     container.ContainerState `json:"state"`
+	UpTime    string                   `json:"upTime"`
+	Usage     DockerContainerUsage     `json:"usage,omitzero"`
+	CreatedAt time.Time                `json:"createdAt"`
 }
