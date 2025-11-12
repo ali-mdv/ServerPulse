@@ -15,7 +15,7 @@ import (
 var ctx = context.Background()
 
 type DockerService interface {
-	ImageList() ([]models.DockerImage, error)
+	ImagesList(all bool) ([]models.DockerImage, error)
 }
 
 type dockerService struct {
@@ -42,8 +42,8 @@ func NewDockerService() DockerService {
 	return &dockerService{client: client}
 }
 
-func (s *dockerService) ImageList() ([]models.DockerImage, error) {
-	imagesSummary, err := s.client.ImageList(ctx, image.ListOptions{})
+func (s *dockerService) ImagesList(all bool) ([]models.DockerImage, error) {
+	imagesSummary, err := s.client.ImageList(ctx, image.ListOptions{All: all})
 	if err != nil {
 		return nil, err
 	}
@@ -51,12 +51,34 @@ func (s *dockerService) ImageList() ([]models.DockerImage, error) {
 	images := make([]models.DockerImage, 0, len(imagesSummary))
 
 	for _, summary := range imagesSummary {
-		idParts := strings.Split(summary.ID, ":")
-		repoParts := strings.Split(summary.RepoTags[0], ":")
+
+		imageID := summary.ID
+		if strings.Contains(imageID, ":") {
+			parts := strings.Split(imageID, ":")
+			if len(parts) > 1 {
+				imageID = parts[1]
+			}
+		}
+
+		repository := "<none>"
+		tag := "<none>"
+
+		if len(summary.RepoTags) > 0 {
+			repoTag := summary.RepoTags[0]
+			repoParts := strings.Split(repoTag, ":")
+
+			if len(repoParts) >= 2 {
+				repository = repoParts[0]
+				tag = repoParts[1]
+			} else if len(repoParts) == 1 {
+				repository = repoParts[0]
+			}
+		}
+
 		image := models.DockerImage{
-			ID:         idParts[1],
-			Repository: repoParts[0],
-			Tag:        repoParts[1],
+			ID:         imageID,
+			Repository: repository,
+			Tag:        tag,
 			Size:       s.humanSize(summary.Size),
 			CreatedAt:  time.Unix(summary.Created, 0).UTC(),
 		}

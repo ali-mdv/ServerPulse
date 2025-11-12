@@ -17,7 +17,7 @@ func NewDockerHandler(service services.DockerService) *dockerHandler {
 }
 
 func (h *dockerHandler) GetDockerImages(c *gin.Context) {
-	images, err := h.service.ImageList()
+	images, err := h.service.ImagesList(true)
 	if err != nil {
 		switch e := err.(type) {
 		case *errors.AppError:
