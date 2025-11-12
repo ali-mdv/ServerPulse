@@ -9,3 +9,13 @@ type DockerImage struct {
 	Size       string    `json:"size"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
+
+type DockerContainer struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Image     string    `json:"image"`
+	Port      string    `json:"port"`
+	State     string    `json:"state"`
+	UpTime    string    `json:"upTime"`
+	CreatedAt time.Time `json:"createdAt"`
+}

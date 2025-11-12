@@ -35,3 +35,23 @@ func (h *dockerHandler) GetDockerImages(c *gin.Context) {
 		"images": images,
 	})
 }
+
+func (h *dockerHandler) GetDockerContainers(c *gin.Context) {
+	containers, err := h.service.ContainersList(true)
+	if err != nil {
+		switch e := err.(type) {
+		case *errors.AppError:
+			c.JSON(e.Code, gin.H{
+				"error": e.Message,
+			})
+		default:
+			c.JSON(errors.ErrInternalServer.Code, gin.H{
+				"error": errors.ErrInternalServer.Message,
+			})
+		}
+
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"containers": containers,
+	})
+}
