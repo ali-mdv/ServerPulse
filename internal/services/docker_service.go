@@ -8,6 +8,7 @@ import (
 	"log"
 	"server-monitoring/internal/models"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -55,7 +56,6 @@ func (s *dockerService) ImagesList(all bool) ([]models.DockerImage, error) {
 	images := make([]models.DockerImage, 0, len(imagesSummary))
 
 	for _, summary := range imagesSummary {
-
 		imageID := summary.ID
 		if strings.Contains(imageID, ":") {
 			parts := strings.Split(imageID, ":")
@@ -92,17 +92,17 @@ func (s *dockerService) ImagesList(all bool) ([]models.DockerImage, error) {
 	return images, err
 }
 
-func (s *dockerService) ContainerStats(c container.Summary) *models.DockerContainerUsage {
-	stats, err := s.client.ContainerStats(ctx, c.ID, false)
+func (s *dockerService) ContainerStats(containerID string) *models.DockerContainerUsage {
+	stats, err := s.client.ContainerStats(ctx, containerID, false)
 	if err != nil {
-		fmt.Printf("Error getting stats for %s: %v\n", c.ID[:12], err)
+		fmt.Printf("Error getting stats for %s: %v\n", containerID[:12], err)
 		return nil
 	}
 	defer stats.Body.Close()
 
 	var statsJson container.StatsResponse
 	if err := json.NewDecoder(stats.Body).Decode(&statsJson); err != nil && err != io.EOF {
-		fmt.Printf("Decode error for %s: %v\n", c.ID[:12], err)
+		fmt.Printf("Decode error for %s: %v\n", containerID[:12], err)
 		return nil
 	}
 
@@ -131,45 +131,47 @@ func (s *dockerService) ContainersList(all bool) ([]models.DockerContainer, erro
 		return nil, err
 	}
 
-	containersInfo := make([]models.DockerContainer, 0, len(containersSummary))
+	containersInfo := make([]models.DockerContainer, len(containersSummary))
+	var wg sync.WaitGroup
+	wg.Add(len(containersSummary))
 
-	for _, summary := range containersSummary {
-		containerID := summary.ID
-		if strings.Contains(containerID, ":") {
-			parts := strings.Split(containerID, ":")
-			if len(parts) > 1 {
-				containerID = parts[1]
+	for i, summary := range containersSummary {
+		go func(i int, summary container.Summary) {
+			defer wg.Done()
+
+			containerID := strings.TrimPrefix(summary.ID, "sha256:")
+			containerName := "<none>"
+			if len(summary.Names) > 0 {
+				containerName = strings.TrimLeft(summary.Names[0], "/")
 			}
-		}
 
-		containerName := "<none>"
-		if len(summary.Names) > 0 {
-			containerName = strings.TrimLeft(summary.Names[0], "/")
-		}
+			port := "<none>"
+			if len(summary.Ports) > 0 {
+				p := summary.Ports[0]
+				port = fmt.Sprintf("%d:%d", p.PublicPort, p.PrivatePort)
+			}
 
-		port := "<none>"
-		if len(summary.Ports) > 0 {
-			hostPort := summary.Ports[0].PublicPort
-			dockerPort := summary.Ports[0].PublicPort
-			port = fmt.Sprintf("%d:%d", hostPort, dockerPort)
-		}
+			info := models.DockerContainer{
+				ID:        containerID,
+				Name:      containerName,
+				Image:     summary.Image,
+				Port:      port,
+				State:     summary.State,
+				UpTime:    summary.Status,
+				CreatedAt: time.Unix(summary.Created, 0).UTC(),
+			}
 
-		containerInfo := models.DockerContainer{
-			ID:        containerID,
-			Name:      containerName,
-			Image:     summary.Image,
-			Port:      port,
-			State:     summary.State,
-			UpTime:    summary.Status,
-			CreatedAt: time.Unix(summary.Created, 0).UTC(),
-		}
+			// Run stats only for running containers (in parallel)
+			if summary.State == "running" {
+				if usage := s.ContainerStats(summary.ID); usage != nil {
+					info.Usage = *usage
+				}
+			}
 
-		if summary.State == container.StateRunning {
-			usage := s.ContainerStats(summary)
-			containerInfo.Usage = *usage
-		}
-
-		containersInfo = append(containersInfo, containerInfo)
+			containersInfo[i] = info
+		}(i, summary)
 	}
+
+	wg.Wait()
 	return containersInfo, nil
 }
