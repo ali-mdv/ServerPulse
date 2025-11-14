@@ -29,6 +29,7 @@ func (h *dockerHandler) GetDockerImages(c *gin.Context) {
 				"error": errors.ErrInternalServer.Message,
 			})
 		}
+		return
 
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -49,6 +50,7 @@ func (h *dockerHandler) GetDockerContainers(c *gin.Context) {
 				"error": errors.ErrInternalServer.Message,
 			})
 		}
+		return
 
 	}
 	c.JSON(http.StatusOK, gin.H{
