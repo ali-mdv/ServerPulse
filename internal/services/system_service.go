@@ -1,7 +1,6 @@
 package services
 
 import (
-	"fmt"
 	"server-monitoring/internal/models"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 
 type SystemService interface {
 	MemUsage() models.Usage
-	CPUUsage() string
+	CPUUsage() float64
 	DiskUsage() models.Usage
 	NetUsage() models.NetworkUsage
 	SystemUsage() models.SystemUsage
@@ -27,25 +26,27 @@ func NewSystemService() SystemService {
 
 func (s *systemService) MemUsage() models.Usage {
 	vmStat, _ := mem.VirtualMemory()
+
 	return models.Usage{
-		UsedPercent: fmt.Sprintf("%.2f%%", vmStat.UsedPercent),
-		Used:        fmt.Sprintf("%.2f GB", float64(vmStat.Used)/1024/1024/1024),
-		Total:       fmt.Sprintf("%.2f GB", float64(vmStat.Total)/1024/1024/1024),
+		UsedPercent: vmStat.UsedPercent,
+		Used:        vmStat.Used,
+		Total:       vmStat.Total,
 	}
 }
 
-func (s *systemService) CPUUsage() string {
+func (s *systemService) CPUUsage() float64 {
 	// CPU usage (average over 1 second)
 	cpuPercent, _ := cpu.Percent(time.Second, false)
-	return fmt.Sprintf("%.2f%%", cpuPercent[0])
+	return cpuPercent[0]
 }
 
 func (s *systemService) DiskUsage() models.Usage {
 	diskStat, _ := disk.Usage("/")
+
 	return models.Usage{
-		UsedPercent: fmt.Sprintf("%.2f%%", diskStat.UsedPercent),
-		Used:        fmt.Sprintf("%.2f GB", float64(diskStat.Used)/1024/1024/1024),
-		Total:       fmt.Sprintf("%.2f GB", float64(diskStat.Total)/1024/1024/1024),
+		UsedPercent: diskStat.UsedPercent,
+		Used:        diskStat.Used,
+		Total:       diskStat.Total,
 	}
 }
 
@@ -54,8 +55,8 @@ func (s *systemService) NetUsage() models.NetworkUsage {
 
 	networkUsage := models.NetworkUsage{}
 	if len(netIO) > 0 {
-		networkUsage.Send = fmt.Sprintf("%.2f MB", float64(netIO[0].BytesSent)/1024/1024)
-		networkUsage.Send = fmt.Sprintf("%.2f MB", float64(netIO[0].BytesRecv)/1024/1024)
+		networkUsage.Send = netIO[0].BytesSent
+		networkUsage.Received = netIO[0].BytesRecv
 	}
 
 	return networkUsage

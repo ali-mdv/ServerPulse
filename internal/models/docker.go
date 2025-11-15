@@ -7,16 +7,16 @@ import (
 )
 
 type DockerContainerUsage struct {
-	CpuPercent string `json:"cpuPercent"`
-	MemPercent string `json:"memPercent"`
-	MemUsage   string `json:"memUsage"`
+	CpuPercent float64 `json:"cpuPercent"`
+	MemPercent float64 `json:"memPercent"`
+	MemUsage   uint64  `json:"memUsage"`
 }
 
 type DockerImage struct {
 	ID         string    `json:"id"`
 	Repository string    `json:"repository"`
 	Tag        string    `json:"tag"`
-	Size       string    `json:"size"`
+	Size       int64     `json:"size"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 

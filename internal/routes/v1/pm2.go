@@ -16,7 +16,7 @@ func RegisterPM2Routes(r *gin.RouterGroup) {
 	api.Use(middlewares.AuthMiddleware())
 
 	{
-		api.GET("", handler.ProcessList)
+		api.GET("/services", handler.ProcessList)
 	}
 
 }

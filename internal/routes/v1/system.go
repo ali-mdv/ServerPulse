@@ -16,6 +16,6 @@ func RegisterSystemRoutes(r *gin.RouterGroup) {
 	api.Use(middlewares.AuthMiddleware())
 
 	{
-		api.GET("/usage", handler.GetSystemUsage)
+		api.GET("/monit", handler.GetSystemUsage)
 	}
 }

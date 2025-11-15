@@ -83,7 +83,7 @@ func (s *dockerService) ImagesList(all bool) ([]models.DockerImage, error) {
 			ID:         imageID,
 			Repository: repository,
 			Tag:        tag,
-			Size:       s.humanSize(summary.Size),
+			Size:       summary.Size,
 			CreatedAt:  time.Unix(summary.Created, 0).UTC(),
 		}
 		images = append(images, image)
@@ -119,9 +119,9 @@ func (s *dockerService) ContainerStats(containerID string) *models.DockerContain
 	memPercent := float64(memUsage) / float64(memLimit) * 100.0
 
 	return &models.DockerContainerUsage{
-		CpuPercent: fmt.Sprintf("%.2f%%", cpuPercent),
-		MemPercent: fmt.Sprintf("%.2f%%", memPercent),
-		MemUsage:   s.humanSize(int64(memUsage)),
+		CpuPercent: cpuPercent,
+		MemPercent: memPercent,
+		MemUsage:   memUsage,
 	}
 }
 
@@ -161,7 +161,7 @@ func (s *dockerService) ContainersList(all bool) ([]models.DockerContainer, erro
 				CreatedAt: time.Unix(summary.Created, 0).UTC(),
 			}
 
-			// Run stats only for running containers (in parallel)
+			// Run stats only for running containers
 			if summary.State == "running" {
 				if usage := s.ContainerStats(summary.ID); usage != nil {
 					info.Usage = *usage
