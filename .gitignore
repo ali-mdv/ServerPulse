@@ -49,3 +49,4 @@ go.work
 ### Custom ###
 .env
 /tmp
+.vscode
