@@ -17,9 +17,10 @@ type MongoDB struct {
 }
 
 type Config struct {
-	Port    int     `mapstructure:"PORT" json:"port" validate:"required,min=1000,max=65535"`
-	GinMode string  `mapstructure:"GIN_MODE" validate:"required,oneof=debug test release"`
-	DB      MongoDB `mapstructure:",squash" json:"db"`
+	Port    int      `mapstructure:"PORT" json:"port" validate:"required,min=1000,max=65535"`
+	GinMode string   `mapstructure:"GIN_MODE" validate:"required,oneof=debug test release"`
+	DB      MongoDB  `mapstructure:",squash" json:"db"`
+	Origins []string `mapstructure:"ORIGINS" json:"origins"`
 }
 
 var Cfg *Config
