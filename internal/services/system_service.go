@@ -18,7 +18,11 @@ type SystemService interface {
 	SystemUsage() models.SystemUsage
 }
 
-type systemService struct{}
+type systemService struct {
+	lastSent     uint64
+	lastReceived uint64
+	lastTime     time.Time
+}
 
 func NewSystemService() SystemService {
 	return &systemService{}
@@ -52,14 +56,30 @@ func (s *systemService) DiskUsage() models.Usage {
 
 func (s *systemService) NetUsage() models.NetworkUsage {
 	netIO, _ := net.IOCounters(false)
-
-	networkUsage := models.NetworkUsage{}
-	if len(netIO) > 0 {
-		networkUsage.Send = netIO[0].BytesSent
-		networkUsage.Received = netIO[0].BytesRecv
+	if len(netIO) == 0 {
+		return models.NetworkUsage{}
 	}
 
-	return networkUsage
+	now := time.Now()
+	interval := now.Sub(s.lastTime).Seconds()
+
+	currentSent := netIO[0].BytesSent
+	currentRecv := netIO[0].BytesRecv
+
+	usage := models.NetworkUsage{}
+
+	// Only compute if we have previous values
+	if !s.lastTime.IsZero() {
+		usage.Send = uint64(float64(currentSent-s.lastSent) / interval)
+		usage.Received = uint64(float64(currentRecv-s.lastReceived) / interval)
+	}
+
+	// Update cache
+	s.lastSent = currentSent
+	s.lastReceived = currentRecv
+	s.lastTime = now
+
+	return usage
 }
 
 func (s *systemService) SystemUsage() models.SystemUsage {
