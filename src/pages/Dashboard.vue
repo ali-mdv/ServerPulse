@@ -62,6 +62,7 @@ import { reactive, computed, onMounted } from "vue";
 import { useToast } from "primevue/usetoast";
 import { useWindowSize } from "@vueuse/core";
 import { useSystemStore } from "@/stores/system";
+import { UsageInfo } from "@/types";
 
 const { width, height } = useWindowSize();
 
@@ -97,24 +98,27 @@ const cpuOption = computed(() => ({
   ],
 }));
 
-const memoryData = reactive({
-  labels: ["Used", "Free"],
-  datasets: [{ data: [65, 35], backgroundColor: ["#60A5FA", "#E5E7EB"] }],
-});
-
-const lineOptions = { responsive: true, maintainAspectRatio: false };
-
 const memOption = reactive({
   tooltip: { trigger: "item" },
   legend: { bottom: 0 },
+  title: {
+    text: "Total: 0 GB",
+    left: "center",
+    bottom: 15,
+    textStyle: {
+      fontSize: 14,
+      fontWeight: "normal",
+    },
+  },
   series: [
     {
       name: "Memory",
       type: "pie",
-      radius: "60%",
+      radius: "75%",
+      center: ["50%", "45%"],
       data: [
-        { value: 65, name: "Used" },
-        { value: 35, name: "Free" },
+        { value: 0, name: "Used" },
+        { value: 0, name: "Free" },
       ],
       emphasis: {
         itemStyle: {
@@ -133,23 +137,58 @@ const highServers = [
   { id: "3", name: "cache-01", cpu: 79, mem: 61 },
 ];
 
+function parseBytes(bytes: number, decimals = 2) {
+  if (bytes === 0) {
+    return {
+      number: 0,
+      unit: "Bytes",
+    };
+  }
+
+  const k = 1024;
+  const units = ["Bytes", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  const number = parseFloat((bytes / Math.pow(k, i)).toFixed(decimals));
+  const unit = units[i];
+
+  return {
+    number,
+    unit,
+  };
+}
+
+function updateCpuUsageChart(cpuUsage: number) {
+  const timeLabel = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  if (cpuData.labels.length >= 12) {
+    cpuData.labels.shift();
+    cpuData.datasets[0].data.shift();
+  }
+
+  cpuData.labels.push(timeLabel);
+  cpuData.datasets[0].data.push(Math.round(cpuUsage));
+}
+
+function updateMemUsageChart(memUsage: UsageInfo) {
+  const total = parseBytes(memUsage.total);
+  const used = parseBytes(memUsage.used);
+  const free = parseBytes(memUsage.total - memUsage.used);
+
+  memOption.series[0].data[0].value = used.number;
+  memOption.series[0].data[1].value = free.number;
+  memOption.title.text = `Total: ${total.number} ${total.unit}`;
+}
+
 async function getSystemUsage() {
   try {
     const systemUsage = await systemStore.fetchSystemUsage();
-
-    const timeLabel = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-
-    if (cpuData.labels.length >= 12) {
-      cpuData.labels.shift();
-      cpuData.datasets[0].data.shift();
-    }
-
-    cpuData.labels.push(timeLabel);
-    cpuData.datasets[0].data.push(Math.round(systemUsage.cpuUsage));
+    updateCpuUsageChart(systemUsage.cpuUsage);
+    updateMemUsageChart(systemUsage.memUsage);
   } catch (err) {
     toast.add({
       severity: "error",
