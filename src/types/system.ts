@@ -45,3 +45,34 @@ export interface PM2Service {
 export interface GetPm2ServicesList {
   processes: PM2Service[];
 }
+
+const enum DockerContainerState {
+  CREATED = "created",
+  RUNNING = "running",
+  PAUSED = "paused",
+  RESTARTING = "restarting",
+  REMOVING = "removing",
+  EXITED = "exited",
+  DEAD = "dead",
+}
+
+export interface DockerUsageContainer {
+  cpuPercent: number;
+  memPercent: number;
+  memUsage: number;
+}
+
+export interface DockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  port: string;
+  state: DockerContainerState;
+  upTime: string;
+  usage?: DockerUsageContainer;
+  createdAt: Date;
+}
+
+export interface GetDockerContainersList {
+  containers: DockerContainer[];
+}

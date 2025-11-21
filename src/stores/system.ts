@@ -7,6 +7,8 @@ import {
   GetSystemUsageApi,
   PM2Service,
   GetPm2ServicesList,
+  DockerContainer,
+  GetDockerContainersList,
 } from "@/types/system";
 
 export const useSystemStore = defineStore("system", () => {
@@ -53,8 +55,30 @@ export const useSystemStore = defineStore("system", () => {
     }
   }
 
+  async function fetchDockerContainers(): Promise<DockerContainer[]> {
+    try {
+      const response = await api.get<GetDockerContainersList>(
+        "docker/containers",
+        {
+          headers: {
+            Authorization: authStore.getToken(),
+          },
+        },
+      );
+      return response.data.containers;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === 401) {
+          throw new Error("Access denied");
+        }
+      }
+      throw new Error("Failed to fetch docker containers list");
+    }
+  }
+
   return {
     fetchSystemUsage,
     fetchPM2Services,
+    fetchDockerContainers,
   };
 });

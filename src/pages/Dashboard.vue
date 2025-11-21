@@ -1,10 +1,5 @@
 <template>
   <div class="space-y-6">
-    <!-- Window Size Debug -->
-    <div class="text-sm text-muted">
-      Window: {{ Math.round(width) }} × {{ Math.round(height) }}
-    </div>
-
     <!-- Top Stats -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
       <Card v-for="(item, i) in topStats" :key="i">
@@ -52,7 +47,10 @@
     </div>
 
     <!-- Services List -->
-    <ServiceManagerPanel :pm2="pm2Services" :docker="[]" />
+    <ServiceManagerPanel
+      :services="pm2Services"
+      :containers="dockerContainers"
+    />
 
     <!-- High Usage Servers -->
     <div>
@@ -75,7 +73,7 @@ import { useWindowSize } from "@vueuse/core";
 import { useToast } from "primevue/usetoast";
 import Card from "@/components/Card.vue";
 import { useSystemStore } from "@/stores/system";
-import { UsageInfo, NetIOInfo, PM2Service } from "@/types";
+import { UsageInfo, NetIOInfo, PM2Service, DockerContainer } from "@/types";
 import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
 
 const { width, height } = useWindowSize();
@@ -110,8 +108,8 @@ const topStats = [
 // CPU Chart
 // ---------------------------
 const cpuData = reactive({
-  labels: [],
-  values: [],
+  labels: Array(12).fill("-"),
+  values: Array(12).fill(0),
 });
 
 const cpuOption = computed(() => ({
@@ -256,10 +254,16 @@ function updateNetwork(io: NetIOInfo) {
 }
 
 // ---------------------------
-// High Usage Servers (static)
+// PM2 Services
 // ---------------------------
 
 const pm2Services = ref<PM2Service[]>([]);
+
+// ---------------------------
+// Docker Containers
+// ---------------------------
+
+const dockerContainers = ref<DockerContainer[]>([]);
 
 // ---------------------------
 // High Usage Servers (static)
@@ -302,10 +306,25 @@ async function loadPm2Services() {
   }
 }
 
+async function loadDockerContainers() {
+  try {
+    const data = await systemStore.fetchDockerContainers();
+    dockerContainers.value = data;
+  } catch (err: any) {
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: err.message,
+    });
+  }
+}
+
 onMounted(() => {
   loadSystemUsage();
   loadPm2Services();
+  loadDockerContainers();
   setInterval(loadSystemUsage, intervalMS.value);
   setInterval(loadPm2Services, intervalMS.value);
+  setInterval(loadDockerContainers, intervalMS.value);
 });
 </script>
