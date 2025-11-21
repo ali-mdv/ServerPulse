@@ -2,7 +2,12 @@ import axios from "axios";
 import { defineStore } from "pinia";
 import { useApi } from "@/plugins/axios";
 import { useAuthStore } from "./auth";
-import { SystemUsage, GetSystemUsageApi } from "@/types/system";
+import {
+  SystemUsage,
+  GetSystemUsageApi,
+  PM2Service,
+  GetPm2ServicesList,
+} from "@/types/system";
 
 export const useSystemStore = defineStore("system", () => {
   const api = useApi();
@@ -30,7 +35,26 @@ export const useSystemStore = defineStore("system", () => {
     }
   }
 
+  async function fetchPM2Services(): Promise<PM2Service[]> {
+    try {
+      const response = await api.get<GetPm2ServicesList>("pm2/services", {
+        headers: {
+          Authorization: authStore.getToken(),
+        },
+      });
+      return response.data.processes;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === 401) {
+          throw new Error("Access denied");
+        }
+      }
+      throw new Error("Failed to fetch pm2 processes list");
+    }
+  }
+
   return {
     fetchSystemUsage,
+    fetchPM2Services,
   };
 });

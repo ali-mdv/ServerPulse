@@ -51,6 +51,9 @@
       </Card>
     </div>
 
+    <!-- Services List -->
+    <ServiceManagerPanel :pm2="pm2Services" :docker="[]" />
+
     <!-- High Usage Servers -->
     <div>
       <h3 class="font-semibold mb-3">Servers with High Usage</h3>
@@ -72,12 +75,13 @@ import { useWindowSize } from "@vueuse/core";
 import { useToast } from "primevue/usetoast";
 import Card from "@/components/Card.vue";
 import { useSystemStore } from "@/stores/system";
-import { UsageInfo, NetIOInfo } from "@/types";
+import { UsageInfo, NetIOInfo, PM2Service } from "@/types";
+import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
 
 const { width, height } = useWindowSize();
 const toast = useToast();
 const systemStore = useSystemStore();
-const intervalMS = 10000;
+const intervalMS = ref<number>(10000);
 
 // ---------------------------
 // Helpers
@@ -254,6 +258,12 @@ function updateNetwork(io: NetIOInfo) {
 // ---------------------------
 // High Usage Servers (static)
 // ---------------------------
+
+const pm2Services = ref<PM2Service[]>([]);
+
+// ---------------------------
+// High Usage Servers (static)
+// ---------------------------
 const highServers = [
   { id: "1", name: "web-01", cpu: 92, mem: 78 },
   { id: "2", name: "db-01", cpu: 88, mem: 85 },
@@ -279,8 +289,23 @@ async function loadSystemUsage() {
   }
 }
 
+async function loadPm2Services() {
+  try {
+    const data = await systemStore.fetchPM2Services();
+    pm2Services.value = data;
+  } catch (err: any) {
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: err.message,
+    });
+  }
+}
+
 onMounted(() => {
   loadSystemUsage();
-  setInterval(loadSystemUsage, intervalMS);
+  loadPm2Services();
+  setInterval(loadSystemUsage, intervalMS.value);
+  setInterval(loadPm2Services, intervalMS.value);
 });
 </script>
