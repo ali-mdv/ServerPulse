@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"server-monitoring/internal/models"
 	"server-monitoring/pkg/errors"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,10 +25,11 @@ var ctx = context.Background()
 type DockerService interface {
 	ImagesList(all bool) ([]models.DockerImage, error)
 	ContainersList(all bool) ([]models.DockerContainer, error)
-	InspectContainer(string) (container.InspectResponse, error)
-	StartContainer(string) error
-	StopContainer(string) error
-	RestartContainer(string) error
+	InspectContainer(id string) (container.InspectResponse, error)
+	StartContainer(id string) error
+	StopContainer(id string) error
+	RestartContainer(id string) error
+	FetchContainerLogs(id string, lines int) (string, error)
 }
 
 type dockerService struct {
@@ -230,4 +232,32 @@ func (s *dockerService) RestartContainer(id string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *dockerService) FetchContainerLogs(id string, lines int) (string, error) {
+
+	reader, err := s.client.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Timestamps: true,
+		Tail:       strconv.Itoa(lines),
+	})
+
+	if err != nil {
+		if cerrdefs.IsNotFound(err) {
+			return "", errors.ErrNotFound
+		}
+		fmt.Printf("Error fetching logs container %s: %v\n", id[:12], err)
+		return "", err
+	}
+
+	defer reader.Close()
+
+	logs, err := io.ReadAll(reader)
+	if err != nil {
+		fmt.Printf("Error fetching logs container %s: %v\n", id[:12], err)
+		return "", err
+	}
+
+	return string(logs), nil
 }

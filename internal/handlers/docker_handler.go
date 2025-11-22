@@ -145,3 +145,25 @@ func (h *dockerHandler) RestartContainer(c *gin.Context) {
 		"message": "container successfully restarted",
 	})
 }
+
+func (h *dockerHandler) GetContainerLogs(c *gin.Context) {
+	containerId, _ := c.Params.Get("containerId")
+	logs, err := h.service.FetchContainerLogs(containerId, 100)
+	if err != nil {
+		switch e := err.(type) {
+		case *errors.AppError:
+			c.JSON(e.Code, gin.H{
+				"error": e.Message,
+			})
+		default:
+			c.JSON(errors.ErrInternalServer.Code, gin.H{
+				"error": errors.ErrInternalServer.Message,
+			})
+		}
+		return
+
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"logs": logs,
+	})
+}
