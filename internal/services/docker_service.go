@@ -27,6 +27,7 @@ type DockerService interface {
 	InspectContainer(string) (container.InspectResponse, error)
 	StartContainer(string) error
 	StopContainer(string) error
+	RestartContainer(string) error
 }
 
 type dockerService struct {
@@ -189,7 +190,7 @@ func (s *dockerService) InspectContainer(id string) (container.InspectResponse, 
 		if cerrdefs.IsNotFound(err) {
 			return container.InspectResponse{}, errors.New(http.StatusNotFound, "container with this id does not exists")
 		}
-		fmt.Printf("Error inspect container %s: %v\n", id[:12], err)
+		fmt.Printf("Error inspecting container %s: %v\n", id[:12], err)
 		return container.InspectResponse{}, err
 	}
 	return result, nil
@@ -201,7 +202,7 @@ func (s *dockerService) StartContainer(id string) error {
 		if cerrdefs.IsNotFound(err) {
 			return errors.ErrNotFound
 		}
-		fmt.Printf("Error start container %s: %v\n", id[:12], err)
+		fmt.Printf("Error starting container %s: %v\n", id[:12], err)
 		return err
 	}
 	return nil
@@ -213,7 +214,19 @@ func (s *dockerService) StopContainer(id string) error {
 		if cerrdefs.IsNotFound(err) {
 			return errors.ErrNotFound
 		}
-		fmt.Printf("Error stop container %s: %v\n", id[:12], err)
+		fmt.Printf("Error stopping container %s: %v\n", id[:12], err)
+		return err
+	}
+	return nil
+}
+
+func (s *dockerService) RestartContainer(id string) error {
+	err := s.client.ContainerRestart(ctx, id, container.StopOptions{})
+	if err != nil {
+		if cerrdefs.IsNotFound(err) {
+			return errors.ErrNotFound
+		}
+		fmt.Printf("Error restarting container %s: %v\n", id[:12], err)
 		return err
 	}
 	return nil
