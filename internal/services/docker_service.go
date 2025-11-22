@@ -25,6 +25,7 @@ type DockerService interface {
 	ImagesList(all bool) ([]models.DockerImage, error)
 	ContainersList(all bool) ([]models.DockerContainer, error)
 	InspectContainer(string) (container.InspectResponse, error)
+	StartContainer(string) error
 }
 
 type dockerService struct {
@@ -185,9 +186,20 @@ func (s *dockerService) InspectContainer(id string) (container.InspectResponse, 
 
 	if err != nil {
 		if cerrdefs.IsNotFound(err) {
-			return container.InspectResponse{}, errors.New(http.StatusNotFound, "Container with this id does not exists")
+			return container.InspectResponse{}, errors.New(http.StatusNotFound, "container with this id does not exists")
 		}
 		return container.InspectResponse{}, err
 	}
 	return result, nil
+}
+
+func (s *dockerService) StartContainer(id string) error {
+	err := s.client.ContainerStart(ctx, id, container.StartOptions{})
+	if err != nil {
+		if cerrdefs.IsNotFound(err) {
+			return errors.ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
