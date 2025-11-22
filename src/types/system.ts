@@ -46,7 +46,7 @@ export interface GetPm2ServicesList {
   processes: PM2Service[];
 }
 
-const enum DockerContainerState {
+export const enum DockerContainerState {
   CREATED = "created",
   RUNNING = "running",
   PAUSED = "paused",

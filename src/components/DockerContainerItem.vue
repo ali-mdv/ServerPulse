@@ -6,13 +6,16 @@
         <span class="text-sm text-muted">• {{ props.container.state }}</span>
       </div>
       <div class="text-sm text-muted">
-        • Up Time: {{ props.container.upTime }} • Image:{{
+        • Status: {{ props.container.upTime }} • Image:{{
           props.container.image
         }}
         • Port:{{ props.container.port }}
       </div>
     </div>
-    <div class="text-right">
+    <div
+      class="text-right"
+      v-if="props.container.state === DockerContainerState.RUNNING"
+    >
       <div class="text-sm">
         CPU: <span class="font-semibold">{{ cpuPercent }}</span>
       </div>
@@ -28,7 +31,7 @@
 
 <script lang="ts" setup>
 import { computed } from "vue";
-import { DockerContainer } from "@/types";
+import { DockerContainer, DockerContainerState } from "@/types";
 
 const props = defineProps<{ container: DockerContainer }>();
 
