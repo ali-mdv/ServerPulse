@@ -83,3 +83,7 @@ export const enum ServiceAction {
   RESTART = "restart",
   LOGS = "logs",
 }
+
+export interface GetContainerLogs {
+  logs: string;
+}
