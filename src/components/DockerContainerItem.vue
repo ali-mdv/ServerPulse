@@ -76,6 +76,7 @@ import { computed, ref } from "vue";
 import { useToast } from "primevue/usetoast";
 import LogsModal from "@/components/LogsModal.vue";
 import { DockerContainer, DockerContainerState, ServiceAction } from "@/types";
+import { useSystemStore } from "@/stores/system";
 
 const props = defineProps<{ container: DockerContainer }>();
 
@@ -112,33 +113,62 @@ const logsLoading = ref(false);
 const logsContent = ref("");
 
 function refreshLogs() {
-  logsContent.value += "\nhi";
+  handleAction(ServiceAction.LOGS);
 }
 
 function updateModal(isOpen: boolean) {
   showLogsModal.value = isOpen;
 }
 
+const systemStore = useSystemStore();
+
 async function handleAction(action: ServiceAction) {
   loading.value = true;
   actionInProgress.value = action;
 
   try {
-    if (action === ServiceAction.LOGS) {
-      logsContent.value = "hi";
+    if (action === ServiceAction.START) {
+      await systemStore.startDockerContainer(props.container);
+      toast.add({
+        severity: "info",
+        summary: "Info",
+        detail: `Successfully started container '${props.container.name}'.`,
+        life: 3000,
+      });
+    } else if (action === ServiceAction.STOP) {
+      await systemStore.stopDockerContainer(props.container);
+      toast.add({
+        severity: "info",
+        summary: "Info",
+        detail: `Successfully stopped container '${props.container.name}'.`,
+        life: 3000,
+      });
+    } else if (action === ServiceAction.RESTART) {
+      await systemStore.restartDockerContainer(props.container);
+      toast.add({
+        severity: "info",
+        summary: "Info",
+        detail: `Successfully restarted container '${props.container.name}'.`,
+        life: 3000,
+      });
+    } else if (action === ServiceAction.LOGS) {
+      logsLoading.value = true;
+      const logs = await systemStore.getContainerLogs(props.container);
+      logsContent.value = logs;
+      toast.add({
+        severity: "info",
+        summary: "Info",
+        detail: `Successfully retrieved logs for container '${props.container.name}'.`,
+        life: 3000,
+      });
       showLogsModal.value = true;
+      logsLoading.value = false;
     }
-    toast.add({
-      severity: "info",
-      summary: "Info",
-      detail: action,
-      life: 3000,
-    });
-  } catch (error) {
+  } catch (error: any) {
     toast.add({
       severity: "error",
       summary: "Error",
-      detail: `Failed to ${action} service`,
+      detail: error.message,
       life: 3000,
     });
   } finally {
