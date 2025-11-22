@@ -76,3 +76,10 @@ export interface DockerContainer {
 export interface GetDockerContainersList {
   containers: DockerContainer[];
 }
+
+export const enum ServiceAction {
+  START = "start",
+  STOP = "stop",
+  RESTART = "restart",
+  LOGS = "logs",
+}

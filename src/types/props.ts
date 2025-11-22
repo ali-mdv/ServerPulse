@@ -1,4 +1,4 @@
-export interface ILogsModalProps {
+export interface LogsModalProps {
   visible: boolean;
   serviceName: string;
   content: string;

@@ -11,6 +11,40 @@
         }}
         • Port:{{ props.container.port }}
       </div>
+      <div class="flex gap-2 flex-wrap mt-2">
+        <button
+          @click="handleAction(ServiceAction.START)"
+          :disabled="
+            loading || props.container.state === DockerContainerState.RUNNING
+          "
+          class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        >
+          {{ ServiceAction.START }}
+        </button>
+        <button
+          @click="handleAction(ServiceAction.STOP)"
+          :disabled="
+            loading || props.container.state !== DockerContainerState.RUNNING
+          "
+          class="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        >
+          {{ ServiceAction.STOP }}
+        </button>
+        <button
+          @click="handleAction(ServiceAction.RESTART)"
+          :disabled="loading"
+          class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        >
+          {{ ServiceAction.RESTART }}
+        </button>
+        <button
+          @click="handleAction(ServiceAction.LOGS)"
+          :disabled="loading"
+          class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        >
+          {{ ServiceAction.LOGS }}
+        </button>
+      </div>
     </div>
     <div
       class="text-right"
@@ -27,13 +61,28 @@
       </div>
     </div>
   </div>
+  <LogsModal
+    :visible="showLogsModal"
+    :service-name="props.container.name"
+    :content="logsContent"
+    :loading="logsLoading"
+    @refresh="refreshLogs"
+    @update="updateModal"
+  />
 </template>
 
 <script lang="ts" setup>
-import { computed } from "vue";
-import { DockerContainer, DockerContainerState } from "@/types";
+import { computed, ref } from "vue";
+import { useToast } from "primevue/usetoast";
+import LogsModal from "@/components/LogsModal.vue";
+import { DockerContainer, DockerContainerState, ServiceAction } from "@/types";
 
 const props = defineProps<{ container: DockerContainer }>();
+
+const toast = useToast();
+
+const loading = ref(false);
+const actionInProgress = ref<ServiceAction | null>(null);
 
 function parseBytes(value: number, base = 1024, decimals = 2) {
   if (value === 0) return { number: 0, unit: "Bytes" };
@@ -57,4 +106,44 @@ const memUsage = computed(() => {
   const parsed = parseBytes(props.container.usage.memUsage);
   return `${parsed.number} ${parsed.unit}`;
 });
+
+const showLogsModal = ref(false);
+const logsLoading = ref(false);
+const logsContent = ref("");
+
+function refreshLogs() {
+  logsContent.value += "\nhi";
+}
+
+function updateModal(isOpen: boolean) {
+  showLogsModal.value = isOpen;
+}
+
+async function handleAction(action: ServiceAction) {
+  loading.value = true;
+  actionInProgress.value = action;
+
+  try {
+    if (action === ServiceAction.LOGS) {
+      logsContent.value = "hi";
+      showLogsModal.value = true;
+    }
+    toast.add({
+      severity: "info",
+      summary: "Info",
+      detail: action,
+      life: 3000,
+    });
+  } catch (error) {
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: `Failed to ${action} service`,
+      life: 3000,
+    });
+  } finally {
+    loading.value = false;
+    actionInProgress.value = null;
+  }
+}
 </script>

@@ -55,9 +55,9 @@
 import { ref, computed, watch } from "vue";
 import Dialog from "primevue/dialog";
 import { useToast } from "primevue/usetoast";
-import { ILogsModalProps } from "@/types";
+import { LogsModalProps } from "@/types";
 
-const props = withDefaults(defineProps<ILogsModalProps>(), {
+const props = withDefaults(defineProps<LogsModalProps>(), {
   visible: false,
   loading: false,
 });
