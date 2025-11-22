@@ -20,5 +20,6 @@ func RegisterDockerRoutes(r *gin.RouterGroup) {
 		api.GET("containers", handler.GetDockerContainers)
 		api.GET("containers/:containerId", handler.GetContainerInfo)
 		api.GET("containers/:containerId/start", handler.StartContainer)
+		api.GET("containers/:containerId/stop", handler.StopContainer)
 	}
 }
