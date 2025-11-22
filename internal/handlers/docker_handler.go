@@ -57,3 +57,25 @@ func (h *dockerHandler) GetDockerContainers(c *gin.Context) {
 		"containers": containers,
 	})
 }
+
+func (h *dockerHandler) GetContainerInfo(c *gin.Context) {
+	containerId, _ := c.Params.Get("containerId")
+	info, err := h.service.InspectContainer(containerId)
+	if err != nil {
+		switch e := err.(type) {
+		case *errors.AppError:
+			c.JSON(e.Code, gin.H{
+				"error": e.Message,
+			})
+		default:
+			c.JSON(errors.ErrInternalServer.Code, gin.H{
+				"error": errors.ErrInternalServer.Message,
+			})
+		}
+		return
+
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"info": info,
+	})
+}

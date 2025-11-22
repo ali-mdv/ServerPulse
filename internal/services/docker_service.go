@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"server-monitoring/internal/models"
+	"server-monitoring/pkg/errors"
 	"strings"
 	"sync"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -21,6 +24,7 @@ var ctx = context.Background()
 type DockerService interface {
 	ImagesList(all bool) ([]models.DockerImage, error)
 	ContainersList(all bool) ([]models.DockerContainer, error)
+	InspectContainer(string) (container.InspectResponse, error)
 }
 
 type dockerService struct {
@@ -174,4 +178,16 @@ func (s *dockerService) ContainersList(all bool) ([]models.DockerContainer, erro
 
 	wg.Wait()
 	return containersInfo, nil
+}
+
+func (s *dockerService) InspectContainer(id string) (container.InspectResponse, error) {
+	result, err := s.client.ContainerInspect(ctx, id)
+
+	if err != nil {
+		if cerrdefs.IsNotFound(err) {
+			return container.InspectResponse{}, errors.New(http.StatusNotFound, "Container with this id does not exists")
+		}
+		return container.InspectResponse{}, err
+	}
+	return result, nil
 }
