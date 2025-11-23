@@ -19,6 +19,7 @@ func RegisterPM2Routes(r *gin.RouterGroup) {
 		api.GET("/services", handler.ProcessList)
 		api.GET("/services/:id/inspect", handler.ProcessDetail)
 		api.GET("/services/:id/start", handler.StartProcess)
+		api.GET("/services/:id/stop", handler.StopProcess)
 	}
 
 }
