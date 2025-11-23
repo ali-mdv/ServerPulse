@@ -14,6 +14,7 @@ type PM2Service interface {
 	FindPM2ProcessByID(id int) (*models.PM2Process, error)
 	StartPM2ProcessByID(id int) error
 	StopPM2ProcessByID(id int) error
+	RestartPM2ProcessByID(id int) error
 }
 
 type pm2Service struct{}
@@ -73,6 +74,21 @@ func (s *pm2Service) StopPM2ProcessByID(id int) error {
 	cmd := exec.Command("pm2", "stop", strconv.Itoa(process.PMID))
 	_, err = cmd.Output()
 	fmt.Printf("Error stopping process %d: %v\n", id, err)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *pm2Service) RestartPM2ProcessByID(id int) error {
+	process, err := s.FindPM2ProcessByID(id)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("pm2", "restart", strconv.Itoa(process.PMID))
+	_, err = cmd.Output()
+	fmt.Printf("Error restarting process %d: %v\n", id, err)
 	if err != nil {
 		return err
 	}
