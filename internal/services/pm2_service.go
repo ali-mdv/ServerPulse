@@ -15,6 +15,7 @@ type PM2Service interface {
 	StartPM2ProcessByID(id int) error
 	StopPM2ProcessByID(id int) error
 	RestartPM2ProcessByID(id int) error
+	FetchContainerLogs(id int, lines int) (string, error)
 }
 
 type pm2Service struct{}
@@ -94,4 +95,27 @@ func (s *pm2Service) RestartPM2ProcessByID(id int) error {
 	}
 
 	return nil
+}
+
+func (s *pm2Service) FetchContainerLogs(id int, lines int) (string, error) {
+	process, err := s.FindPM2ProcessByID(id)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command(
+		"pm2",
+		"logs",
+		strconv.Itoa(process.PMID),
+		"--lines",
+		strconv.Itoa(lines),
+		"--nostream",
+	)
+
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Printf("Error fetching logs process %d: %v\n", id, err)
+		return "", err
+	}
+
+	return string(out[1:]), nil
 }

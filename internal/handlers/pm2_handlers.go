@@ -152,3 +152,32 @@ func (h *PM2Handler) RestartProcess(c *gin.Context) {
 		"message": "process successfully restarted",
 	})
 }
+
+func (h *PM2Handler) GetProcessLogs(c *gin.Context) {
+	idStr := c.Param("id")
+	pmID, err := strconv.ParseInt(idStr, 10, 0)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid PM2 id; expected a numeric value",
+		})
+		return
+	}
+
+	logs, err := h.service.FetchContainerLogs(int(pmID), 100)
+	if err != nil {
+		switch e := err.(type) {
+		case *errors.AppError:
+			c.JSON(e.Code, gin.H{
+				"error": e.Message,
+			})
+		default:
+			c.JSON(errors.ErrInternalServer.Code, gin.H{
+				"error": errors.ErrInternalServer.Message,
+			})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"logs": logs,
+	})
+}
