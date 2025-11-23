@@ -65,3 +65,32 @@ func (h *PM2Handler) ProcessDetail(c *gin.Context) {
 		"process": process,
 	})
 }
+
+func (h *PM2Handler) StartProcess(c *gin.Context) {
+	idStr := c.Param("id")
+	pmID, err := strconv.ParseInt(idStr, 10, 0)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid PM2 id; expected a numeric value",
+		})
+		return
+	}
+
+	err = h.service.StartPM2ProcessByID(int(pmID))
+	if err != nil {
+		switch e := err.(type) {
+		case *errors.AppError:
+			c.JSON(e.Code, gin.H{
+				"error": e.Message,
+			})
+		default:
+			c.JSON(errors.ErrInternalServer.Code, gin.H{
+				"error": errors.ErrInternalServer.Message,
+			})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "process successfully started",
+	})
+}
