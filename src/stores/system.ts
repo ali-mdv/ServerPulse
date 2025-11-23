@@ -9,7 +9,7 @@ import {
   GetPm2ServicesList,
   DockerContainer,
   GetDockerContainersList,
-  GetContainerLogs,
+  GetLogsApi,
 } from "@/types/system";
 
 export const useSystemStore = defineStore("system", () => {
@@ -88,7 +88,7 @@ export const useSystemStore = defineStore("system", () => {
       if (axios.isAxiosError(err)) {
         if (err.response.status === axios.HttpStatusCode.Unauthorized) {
           throw new Error("Access denied");
-        } else if (err.response.status === axios.HttpStatusCode.Ok) {
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
           throw new Error(`Container '${container.name}' was not found.`);
         }
       }
@@ -107,7 +107,7 @@ export const useSystemStore = defineStore("system", () => {
       if (axios.isAxiosError(err)) {
         if (err.response.status === axios.HttpStatusCode.Unauthorized) {
           throw new Error("Access denied");
-        } else if (err.response.status === axios.HttpStatusCode.Ok) {
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
           throw new Error(`Container '${container.name}' was not found.`);
         }
       }
@@ -126,7 +126,7 @@ export const useSystemStore = defineStore("system", () => {
       if (axios.isAxiosError(err)) {
         if (err.response.status === axios.HttpStatusCode.Unauthorized) {
           throw new Error("Access denied");
-        } else if (err.response.status === axios.HttpStatusCode.Ok) {
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
           throw new Error(`Container '${container.name}' was not found.`);
         }
       }
@@ -136,7 +136,7 @@ export const useSystemStore = defineStore("system", () => {
 
   async function getContainerLogs(container: DockerContainer): Promise<string> {
     try {
-      const response = await api.get<GetContainerLogs>(
+      const response = await api.get<GetLogsApi>(
         `docker/containers/${container.id}/logs`,
         {
           headers: {
@@ -149,13 +149,93 @@ export const useSystemStore = defineStore("system", () => {
       if (axios.isAxiosError(err)) {
         if (err.response.status === axios.HttpStatusCode.Unauthorized) {
           throw new Error("Access denied");
-        } else if (err.response.status === axios.HttpStatusCode.Ok) {
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
           throw new Error(`Container '${container.name}' was not found.`);
         }
       }
       throw new Error(
         `Unable to retrieve logs for container '${container.name}'.`,
       );
+    }
+  }
+
+  async function startPM2Service(service: PM2Service) {
+    try {
+      await api.get(`pm2/services/${service.pm_id}/start`, {
+        headers: {
+          Authorization: authStore.getToken(),
+        },
+      });
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
+          throw new Error("Access denied");
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
+          throw new Error(`Service '${service.name}' was not found.`);
+        }
+      }
+      throw new Error(`Unable to start service '${service.name}'.`);
+    }
+  }
+
+  async function stopPM2Service(service: PM2Service) {
+    try {
+      await api.get(`pm2/services/${service.pm_id}/stop`, {
+        headers: {
+          Authorization: authStore.getToken(),
+        },
+      });
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
+          throw new Error("Access denied");
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
+          throw new Error(`Service '${service.name}' was not found.`);
+        }
+      }
+      throw new Error(`Unable to stop service '${service.name}'.`);
+    }
+  }
+
+  async function restartPM2Service(service: PM2Service) {
+    try {
+      await api.get(`pm2/services/${service.pm_id}/restart`, {
+        headers: {
+          Authorization: authStore.getToken(),
+        },
+      });
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
+          throw new Error("Access denied");
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
+          throw new Error(`Service '${service.name}' was not found.`);
+        }
+      }
+      throw new Error(`Unable to restart service '${service.name}'.`);
+    }
+  }
+
+  async function getPM2ServiceLogs(service: PM2Service): Promise<string> {
+    try {
+      const response = await api.get<GetLogsApi>(
+        `pm2/services/${service.pm_id}/logs`,
+        {
+          headers: {
+            Authorization: authStore.getToken(),
+          },
+        },
+      );
+      return response.data.logs;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
+          throw new Error("Access denied");
+        } else if (err.response.status === axios.HttpStatusCode.NotFound) {
+          throw new Error(`Service '${service.name}' was not found.`);
+        }
+      }
+      throw new Error(`Unable to retrieve logs for service '${service.name}'.`);
     }
   }
 
@@ -167,5 +247,9 @@ export const useSystemStore = defineStore("system", () => {
     stopDockerContainer,
     restartDockerContainer,
     getContainerLogs,
+    startPM2Service,
+    stopPM2Service,
+    restartPM2Service,
+    getPM2ServiceLogs,
   };
 });

@@ -20,8 +20,13 @@ export interface GetSystemUsageApi {
   systemUsage: SystemUsage;
 }
 
+export const enum PM2ServiceState {
+  ONLINE = "online",
+  STOPPED = "stopped",
+}
+
 interface PM2Env {
-  status: string;
+  status: PM2ServiceState;
   pm_uptime: number;
   restart_time: number;
   unstable_restarts: number;
@@ -38,6 +43,7 @@ interface PM2Monit {
 export interface PM2Service {
   name: string;
   pid: number;
+  pm_id: string;
   pm2_env: PM2Env;
   monit: PM2Monit;
 }
@@ -84,6 +90,6 @@ export const enum ServiceAction {
   LOGS = "logs",
 }
 
-export interface GetContainerLogs {
+export interface GetLogsApi {
   logs: string;
 }
