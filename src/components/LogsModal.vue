@@ -5,6 +5,7 @@
     modal
     :style="{ width: '90vw', maxWidth: '900px' }"
     class="p-fluid"
+    @show="scrollToBottom"
   >
     <div class="space-y-4">
       <div v-if="loading" class="flex items-center justify-center p-8">
@@ -16,11 +17,20 @@
 
       <div
         v-else
-        class="bg-gray-900 text-gray-100 p-4 rounded font-mono text-sm overflow-auto max-h-96 border border-gray-700"
+        ref="logsContainer"
+        class="bg-gray-900 text-gray-100 p-4 rounded text-sm overflow-auto max-h-96 border border-gray-700"
+        style="
+          font-family: 'Menlo', 'Monaco', 'Courier New', 'Courier', monospace;
+          white-space: pre-wrap;
+          word-break: break-word;
+        "
       >
-        <div v-for="(line, index) in logLines" :key="index" class="py-0.5">
-          {{ line }}
-        </div>
+        <div
+          v-for="(line, index) in logLines"
+          :key="index"
+          class="py-0"
+          v-html="line"
+        ></div>
         <div v-if="logLines.length === 0" class="text-gray-500">
           No logs available
         </div>
@@ -52,9 +62,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, nextTick } from "vue";
 import Dialog from "primevue/dialog";
 import { useToast } from "primevue/usetoast";
+import { ansiToHtml } from "@/lib/ansi-to-html";
 import { LogsModalProps } from "@/types";
 
 const props = withDefaults(defineProps<LogsModalProps>(), {
@@ -69,9 +80,18 @@ const emit = defineEmits<{
 
 const isOpen = ref(props.visible);
 const toast = useToast();
+const logsContainer = ref<HTMLDivElement | null>(null);
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (logsContainer.value) {
+      logsContainer.value.scrollTop = logsContainer.value.scrollHeight;
+    }
+  });
+}
 
 const logLines = computed(() => {
-  return props.content.split("\n").filter((line) => line.trim() !== "");
+  return props.content.split("\n").map((line) => ansiToHtml(line));
 });
 
 watch(
@@ -85,6 +105,33 @@ watch(isOpen, (newVal) => {
   emit("update", newVal);
 });
 
+watch(
+  () => props.loading,
+  (newLoading) => {
+    // When loading finishes, scroll to bottom after content renders
+    if (!newLoading) {
+      scrollToBottomAfterRender();
+    }
+  },
+);
+
+watch(
+  () => props.content,
+  () => {
+    if (!props.loading) {
+      scrollToBottomAfterRender();
+    }
+  },
+  { flush: "post" },
+);
+
+function scrollToBottomAfterRender() {
+  requestAnimationFrame(() => {
+    if (logsContainer.value) {
+      logsContainer.value.scrollTop = logsContainer.value.scrollHeight;
+    }
+  });
+}
 function refreshLogs() {
   emit("refresh");
   toast.add({

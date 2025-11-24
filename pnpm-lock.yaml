@@ -11,6 +11,9 @@ importers:
       '@vueuse/core':
         specifier: ^10.5.0
         version: 10.11.1(vue@3.5.22(typescript@5.9.2))
+      ansi-html:
+        specifier: ^0.0.9
+        version: 0.0.9
       axios:
         specifier: ^1.13.2
         version: 1.13.2
@@ -510,6 +513,11 @@ packages:
 
   '@vueuse/shared@10.11.1':
     resolution: {integrity: sha512-LHpC8711VFZlDaYUXEBbFBCQ7GS3dVU9mjOhhMhXP6txTV4EhYQg/KGnQuvt/sPAtoUKq7VVUnL6mVtFoL42sA==}
+
+  ansi-html@0.0.9:
+    resolution: {integrity: sha512-ozbS3LuenHVxNRh/wdnN16QapUHzauqSomAl1jwwJRRsGwFwtj644lIhxfWu0Fy0acCij2+AEgHvjscq3dlVXg==}
+    engines: {'0': node >= 0.8.0}
+    hasBin: true
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -1799,6 +1807,8 @@ snapshots:
     transitivePeerDependencies:
       - '@vue/composition-api'
       - vue
+
+  ansi-html@0.0.9: {}
 
   ansi-regex@5.0.1: {}
 
