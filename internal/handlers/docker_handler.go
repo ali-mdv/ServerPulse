@@ -30,7 +30,6 @@ func (h *dockerHandler) GetDockerImages(c *gin.Context) {
 			})
 		}
 		return
-
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"images": images,

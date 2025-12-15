@@ -18,6 +18,7 @@ type PM2Monit struct {
 type PM2Process struct {
 	Name   string   `json:"name"`
 	PID    int      `json:"pid"`
+	PMID   int      `json:"pm_id"`
 	PM2Env PM2Env   `json:"pm2_env"`
 	Monit  PM2Monit `json:"monit"`
 }
