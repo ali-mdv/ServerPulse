@@ -1,47 +1,79 @@
 package services
 
 import (
-	"context"
+	"fmt"
+	"server-monitoring/internal/dtos"
 	"server-monitoring/internal/models"
-	"time"
+	"server-monitoring/internal/repository"
+	"server-monitoring/pkg/errors"
+	database "server-monitoring/pkg/mongo"
 
-	"go.mongodb.org/mongo-driver/v2/mongo"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type UserService interface {
-	UsersList() ([]models.User, error)
+	UsersList() (*[]models.User, error)
+	CreateUser(dtos.CreateUserDTO) (*models.User, error)
+	FindUserByID(string) (*models.User, error)
+	FindUserByEmail(string) (*models.User, error)
+	UpdateUserByID(string, dtos.UpdateUserDTO) (*models.User, error)
+	GenerateHash(string) (*string, error)
 }
 
 type userService struct {
-	db *mongo.Collection
+	repo repository.UserRepository
 }
 
-func NewUserService(db *mongo.Collection) UserService {
-	return &userService{db: db}
+func NewUserService(dbName string) UserService {
+	db := database.GetDatabase(dbName)
+	userRepo := repository.NewUserRepository(db)
+	return &userService{repo: userRepo}
 }
 
-func (s *userService) UsersList() ([]models.User, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func (s *userService) UsersList() (*[]models.User, error) {
+	return s.repo.UsersList()
+}
 
-	cursor, err := s.db.Find(ctx, nil)
+func (s *userService) FindUserByID(userID string) (*models.User, error) {
+	return s.repo.FindUserByID(userID)
+}
+
+func (s *userService) FindUserByEmail(userEmail string) (*models.User, error) {
+	return s.repo.FindUserByEmail(userEmail)
+}
+
+func (s *userService) CreateUser(dto dtos.CreateUserDTO) (*models.User, error) {
+	user, _ := s.repo.FindUserByEmail(dto.Email)
+	if user != nil {
+		return nil, errors.ErrConflict
+	}
+
+	hashedPassword, err := s.GenerateHash(dto.Password)
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	dto.Password = *hashedPassword
 
-	var users []models.User
-	for cursor.Next(ctx) {
-		var user models.User
-		if err := cursor.Decode(&user); err != nil {
+	return s.repo.CreateUser(dto)
+}
+
+func (s *userService) UpdateUserByID(userID string, dto dtos.UpdateUserDTO) (*models.User, error) {
+	if dto.Password != nil {
+		hashedPassword, err := s.GenerateHash(*dto.Password)
+		if err != nil {
 			return nil, err
 		}
-		users = append(users, user)
+		dto.Password = hashedPassword
 	}
 
-	if err := cursor.Err(); err != nil {
-		return nil, err
-	}
+	return s.repo.UpdateUserByID(userID, dto)
+}
 
-	return users, nil
+func (s *userService) GenerateHash(password string) (*string, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+	hash := string(hashedPassword)
+	return &hash, nil
 }
