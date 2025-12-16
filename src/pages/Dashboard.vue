@@ -68,18 +68,15 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted, ref } from "vue";
-import { useWindowSize } from "@vueuse/core";
+import { reactive, computed, onMounted, ref, watch } from "vue";
 import { useToast } from "primevue/usetoast";
 import Card from "@/components/Card.vue";
 import { useSystemStore } from "@/stores/system";
 import { UsageInfo, NetIOInfo, PM2Service, DockerContainer } from "@/types";
 import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
 
-const { width, height } = useWindowSize();
 const toast = useToast();
 const systemStore = useSystemStore();
-const intervalMS = ref<number>(10000);
 
 // ---------------------------
 // Helpers
@@ -323,8 +320,8 @@ onMounted(() => {
   loadSystemUsage();
   loadPm2Services();
   loadDockerContainers();
-  setInterval(loadSystemUsage, intervalMS.value);
-  setInterval(loadPm2Services, intervalMS.value);
-  setInterval(loadDockerContainers, intervalMS.value);
+  setInterval(loadSystemUsage, systemStore.intervalMS);
+  setInterval(loadPm2Services, systemStore.intervalMS);
+  setInterval(loadDockerContainers, systemStore.intervalMS);
 });
 </script>

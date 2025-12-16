@@ -1,5 +1,6 @@
 import axios from "axios";
 import { defineStore } from "pinia";
+import { ref } from "vue";
 import { useApi } from "@/plugins/axios";
 import { useAuthStore } from "./auth";
 import {
@@ -16,7 +17,7 @@ export const useSystemStore = defineStore("system", () => {
   const api = useApi();
   const authStore = useAuthStore();
 
-  // const cpuUsageList: Number[] = [];
+  const intervalMS = ref<number>(10000);
 
   async function fetchSystemUsage(): Promise<SystemUsage> {
     try {
@@ -25,12 +26,11 @@ export const useSystemStore = defineStore("system", () => {
           Authorization: authStore.getToken(),
         },
       });
-      const cpuUsage = response.data.systemUsage.cpuUsage;
-      // cpuUsageList.push(cpuUsage);
+
       return response.data.systemUsage;
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        if (err.response.status === 401) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
           throw new Error("Access denied");
         }
       }
@@ -48,7 +48,7 @@ export const useSystemStore = defineStore("system", () => {
       return response.data.processes;
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        if (err.response.status === 401) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
           throw new Error("Access denied");
         }
       }
@@ -69,7 +69,7 @@ export const useSystemStore = defineStore("system", () => {
       return response.data.containers;
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        if (err.response.status === 401) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
           throw new Error("Access denied");
         }
       }
@@ -240,6 +240,7 @@ export const useSystemStore = defineStore("system", () => {
   }
 
   return {
+    intervalMS,
     fetchSystemUsage,
     fetchPM2Services,
     fetchDockerContainers,
