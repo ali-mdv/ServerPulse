@@ -103,3 +103,32 @@ func (h *userHandler) UpdateUser(c *gin.Context) {
 		"user": user,
 	})
 }
+
+func (h *userHandler) GetUserProfile(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	userIDStr, ok := userID.(string)
+	if !exists || !ok {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "access denied",
+		})
+		return
+	}
+
+	user, err := h.service.FindUserByID(userIDStr)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "access denied",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user": user,
+	})
+}
