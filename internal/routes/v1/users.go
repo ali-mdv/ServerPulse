@@ -18,6 +18,8 @@ func RegisterUserRoutes(r *gin.RouterGroup) {
 	{
 		api.GET("", handler.GetUsers)
 		api.POST("", handler.CreateUser)
+		api.GET("/profile", handler.GetUserProfile)
+		api.PUT("/profile", handler.UpdateUserProfile)
 		api.GET("/:userID", handler.GetUserByID)
 		api.PUT("/:userID", handler.UpdateUser)
 	}
