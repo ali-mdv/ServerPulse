@@ -1,12 +1,44 @@
 import axios from "axios";
 import { defineStore } from "pinia";
 import { useApi } from "@/plugins/axios";
-import { GetUsersApi, CreateUserApi, User } from "@/types";
+import { GetUsersApi, CreateUserApi, ProfileApi, User } from "@/types";
 import { useAuthStore } from "./auth";
 
 export const useUsersStore = defineStore("users", () => {
   const api = useApi();
   const authStore = useAuthStore();
+
+  async function getProfile(): Promise<User> {
+    try {
+      const response = await api.get<ProfileApi>("users/profile", {
+        headers: {
+          Authorization: authStore.getToken(),
+        },
+      });
+      return response.data.user;
+    } catch (err) {
+      authStore.logout();
+      throw new Error("Access denied");
+    }
+  }
+
+  async function updateProfile(email: string): Promise<User> {
+    try {
+      const response = await api.post<ProfileApi>(
+        "users/profile",
+        { email },
+        {
+          headers: {
+            Authorization: authStore.getToken(),
+          },
+        },
+      );
+      return response.data.user;
+    } catch (err) {
+      authStore.logout();
+      throw new Error("Access denied");
+    }
+  }
 
   async function getUsers(): Promise<User[]> {
     try {
@@ -50,6 +82,8 @@ export const useUsersStore = defineStore("users", () => {
   }
 
   return {
+    getProfile,
+    updateProfile,
     getUsers,
     addUser,
   };
