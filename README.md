@@ -29,6 +29,11 @@ ServerPulse/
 │   ├── internal/
 │   │   ├── handlers/        # gin HTTP handlers
 │   │   ├── services/        # business logic (system, docker, pm2, auth, user)
+│   │   │   └── pm2/         # axon-rpc client over PM2's unix socket
+│   │   │       ├── transport.go      # AMP wire format + unix-socket I/O
+│   │   │       ├── rpc.go            # axon-rpc call envelope
+│   │   │       ├── client.go         # high-level PM2 methods (list/start/stop/logs)
+│   │   │       └── *_test.go         # wire-format + fake-daemon integration tests
 │   │   ├── repository/      # mongo persistence
 │   │   ├── routes/          # gin route registration
 │   │   ├── models/          # domain types
@@ -90,18 +95,47 @@ Frontend `/api/*` is reverse-proxied by nginx to the backend container. The back
 
 ---
 
+## Host monitoring
+
+The backend monitors **the host it's running on** (the Docker host), not just itself. Two host-side daemons need to be reachable from the container without anything being installed inside it:
+
+- **Docker daemon** — reached via `/var/run/docker.sock`, bind-mounted into the backend container. The container also needs the host's `docker` group GID (see `DOCKER_GID` below) so the backend user can read the socket.
+- **PM2 daemon** — reached via `$PM2_HOME/rpc.sock` on the host, bind-mounted into the container at `/run/pm2`. PM2's directory is bind-mounted under `/run/pm2` rather than `/root/.pm2` because distroless's `/root` is mode 700 and unreachable by a non-root uid.
+
+The backend runs as `HOST_UID:HOST_GID` (uid 1000 / gid 1000 by default) so it can read the PM2 socket as its owner. Bind mounts inherit host permissions, so this matches whatever user runs PM2 on the host.
+
+If you want the backend to monitor a *different* host later, the same `/run/pm2` mount becomes an HTTP bridge on that host instead — the in-container code stays the same.
+
+---
+
+## PM2 client (no shell-out, no Node in the container)
+
+The backend never shells out to the `pm2` binary. The distroless image has no shell, no Node, no `pm2` — and adding them would defeat the purpose of a minimal monitoring image. Instead, `internal/services/pm2/` is a from-scratch Go implementation of PM2's wire protocol:
+
+- **AMP** (`visionmedia/node-amp`) — version-byte + per-arg length-prefixed framing.
+- **axon-rpc** (`@pm2/axon-rpc`) — JSON `{type,method,args}` envelopes wrapped as `j:`/`s:`-prefixed AMP args. Every call carries a request id (`<pid>:<n>`); the daemon's rep socket pops it off to wire up the reply callback.
+- **Logs** — read directly from `pm_out_log_path` / `pm_err_log_path` instead of going through `pm2 logs`, so the daemon doesn't have to be involved for tail.
+
+Methods exposed to the rest of the backend match the previous interface (`List`, `Start`, `Stop`, `Restart`, `TailLogs`), so handlers/routes don't need to know the protocol changed.
+
+If PM2's daemon isn't running, the dial fails fast and the endpoint returns `503 pm2 daemon unreachable: <reason>` with the real cause logged at startup — not a generic 500.
+
+---
+
 ## Local development
 
 ### Backend
 
 ```bash
 cd backend
-cp ../.env.example .env       # backend reads GIN_MODE, PORT, DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD
+cp ../.env.example .env       # backend reads GIN_MODE, PORT, DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD, PM2_SOCKET_PATH
 # point DB_HOST at a local mongod (e.g. 127.0.0.1:27017) — the docker stack uses the "mongo" service name instead
+# set PM2_SOCKET_PATH to the host's $HOME/.pm2/rpc.sock if you want to talk to a local PM2 daemon
 
 air                            # hot reload (uses .air.toml)
 # or
 go run ./cmd                   # one-shot run
+go test ./...                  # unit tests (incl. axon-rpc round-trip + fake daemon)
 ```
 
 Requires Go 1.24+. MongoDB must be reachable.
@@ -157,6 +191,11 @@ Authentication: JWT bearer in `Authorization: Bearer <token>` header on protecte
 | `GIN_MODE`          | backend runtime  | `release` (docker), `debug` (local) |
 | `DB_HOST`           | backend runtime  | `mongo` in docker, `127.0.0.1` locally |
 | `DB_PORT`           | backend runtime  | `27017`                  |
+| `PM2_HOME`          | host bind mount  | `/home/<user>/.pm2` (find yours with `ls -ld ~/.pm2`) |
+| `PM2_SOCKET_PATH`   | backend runtime  | `/run/pm2/rpc.sock` (matches the bind mount target) |
+| `HOST_UID`          | docker-compose   | `1000` — uid running the host's PM2 (`id -u`) |
+| `HOST_GID`          | docker-compose   | `1000` — primary gid of that user (`id -g`) |
+| `DOCKER_GID`        | docker-compose   | find with `stat -c %g /var/run/docker.sock` (commonly `999` or `125`) |
 | `VITE_API_BASE_URL` | frontend build   | `/api`                   |
 | `VITE_SERVER_ADDRESS` | frontend build | `http://localhost:8080`  |
 
@@ -167,3 +206,4 @@ Authentication: JWT bearer in `Authorization: Bearer <token>` header on protecte
 - `nginx.conf` in the frontend folder is **only** used by the Docker image — local `pnpm dev` does not use it.
 - `backend/.air.toml` is **only** used by local `air` runs.
 - MongoDB credentials live in `.env`; the bundled example uses `ali` / `123` for local convenience — change before exposing publicly.
+- The PM2 endpoint returns `503` (not `500`) when the daemon is unreachable — it's a runtime state, not a bug.

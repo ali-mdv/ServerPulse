@@ -34,8 +34,21 @@ Subproject files that must stay where they are (referenced by tools/builds):
 - **Config:** `pkg/config.Load()` reads env via Viper. Don't read `os.Getenv` directly elsewhere.
 - **Auth:** JWT (`pkg/...`). Protected routes go through the auth middleware in `internal/middlewares/auth.go`.
 - **System metrics:** `gopsutil` is the source. Don't shell out to `top`/`free`/etc.
-- **Docker / PM2 control:** use the official SDKs, not CLI shelling.
+- **Docker control:** use the official `github.com/docker/docker/client` SDK (`client.FromEnv`). The backend container needs `/var/run/docker.sock` bind-mounted and the host's `docker` group added via `group_add` in `docker-compose.yml`.
+- **PM2 control:** never shell out to the `pm2` binary — the distroless image has no Node. `internal/services/pm2/` is a from-scratch Go client that speaks PM2's AMP + axon-rpc protocol directly over the daemon's unix socket (see "PM2 wire protocol" below).
 - **Mongo:** `pkg/mongo` owns the client. Get collections via `database.GetCollection(name)`.
+
+### PM2 wire protocol (internal/services/pm2/)
+
+The package owns three concerns, in three files:
+
+- `transport.go` — AMP wire format (meta byte = `(version<<4)|argc`, then per-arg `uint32 BE length` + body) and a thread-safe single-connection reader/writer over the unix socket.
+- `rpc.go` — axon-rpc envelope. Every call sends `[j:<json call object>, s:"<pid>:<n>"]`; the daemon's rep socket pops the id off to wire up the reply. Replies come back as `[j:<json body>, s:<echoed id>]` and we decode the first arg.
+- `client.go` — high-level methods (`GetMonitorData`, `StartProcessID`, `StopProcessID`, `RestartProcessID`, `TailLogs`). Logs are read directly from `pm_out_log_path` / `pm_err_log_path`, no RPC involved.
+
+If you change anything here, mirror it in the fake server in `client_test.go` (`fakeDaemon`) so the round-trip tests still cover it. The `transient` cases to watch for: missing id → daemon logs `reply false` and never responds; wrong prefix (`j:` vs `s:`) → unpack fails; argc > 15 → AMP refuses to encode.
+
+If PM2's daemon is down, `Dial` fails and the service keeps the error to surface later as a 503 (not 500). Don't cache a successful client at construction time without also storing the dial error — otherwise the error becomes invisible after restart.
 
 ## Frontend
 
@@ -55,6 +68,7 @@ Subproject files that must stay where they are (referenced by tools/builds):
 | Task                          | Command                                          |
 |-------------------------------|--------------------------------------------------|
 | Run everything                | `docker compose up --build` (from repo root)     |
+| Backend tests                 | `cd backend && go test ./...`                    |
 | Backend only (local)          | `cd backend && air` (requires local mongod)      |
 | Frontend only (local)         | `cd frontend && pnpm dev`                        |
 | Typecheck frontend            | `cd frontend && pnpm typecheck`                  |
@@ -66,7 +80,18 @@ Subproject files that must stay where they are (referenced by tools/builds):
 
 - `.env` at the root is the single source for compose and the build.
 - `VITE_*` vars are baked at build time — changing `.env` requires `docker compose up --build` (or `pnpm build`) to take effect.
-- Backend env (`GIN_MODE`, `PORT`, `DB_*`) is read at container start; changes require `docker compose up <service>`.
+- Backend env (`GIN_MODE`, `PORT`, `DB_*`, `PM2_SOCKET_PATH`) is read at container start; changes require `docker compose up <service>`.
+
+### Host-monitoring env (required for `/docker/*` and `/pm2/*`)
+
+The backend container must reach two host-side daemons. Both are configured via `.env`:
+
+- `PM2_HOME` — directory on the Docker host holding PM2's `rpc.sock`. Bind-mounted to `/run/pm2` in the container. **Do not** mount under `/root/.pm2` — distroless's `/root` is mode 700 and unreachable by the non-root backend user.
+- `PM2_SOCKET_PATH` — path inside the container, almost always `/run/pm2/rpc.sock`. Read by `pkg/config` and passed to `services.NewPM2Service`.
+- `HOST_UID`, `HOST_GID` — uid/gid of the user that owns PM2 on the host (`id -u` / `id -g`). The backend container runs as this user so it can read the PM2 socket.
+- `DOCKER_GID` — gid of the `docker` group on the host (`stat -c %g /var/run/docker.sock`). Required for the backend to reach the docker socket.
+
+If these are wrong or unset, `/pm2/services` and `/docker/containers` will return 503/500 — but `pkg/config` only complains about *missing* `DB_*` / `PORT`, not about `PM2_SOCKET_PATH`, so check the container's startup log for `pm2 service: dial …` to see the real cause.
 
 ## Conventions
 
@@ -84,11 +109,16 @@ Subproject files that must stay where they are (referenced by tools/builds):
 - Don't replace Naive UI or ECharts without checking the consuming pages first.
 - Don't bypass the layered structure (handler → service → repository) in the backend.
 - Don't introduce a top-level `client/` or `server/` directory — the repos were merged into `frontend/` and `backend/` deliberately.
+- Don't reinstall Node or the `pm2` binary inside the backend image — the whole point of `internal/services/pm2/` is to talk to the host's PM2 without installing anything in the container. If you need a new PM2 operation, extend `internal/services/pm2/client.go` using the existing transport.
+- Don't mount PM2's directory at `/root/.pm2` — `/root` is mode 700 in distroless and the bind mount will be unreachable.
 
 ## Docker
 
 - Compose file: `docker-compose.yml` at root.
 - Builds use `context: .` with relative dockerfile paths (`./backend/Dockerfile`, `./frontend/Dockerfile`). The root `.dockerignore` is honored for both.
-- Backend image: multi-stage Go → distroless static, nonroot user.
+- Backend image: multi-stage Go → distroless static, nonroot user **overridden** at runtime by `user:` in compose so it can read the host's PM2 socket.
 - Frontend image: multi-stage pnpm build → nginx, with `/api` reverse-proxied to the `backend` service.
 - Mongo data persists in the named volume `mongo_data`.
+- Bind mounts that cross the host/container boundary:
+  - `/var/run/docker.sock:/var/run/docker.sock` (host docker daemon)
+  - `${PM2_HOME}:/run/pm2` (host PM2 daemon sockets)
