@@ -3,10 +3,11 @@ package services
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
+	"log"
+
 	"server-monitoring/internal/models"
+	pm2pkg "server-monitoring/internal/services/pm2"
 	"server-monitoring/pkg/errors"
-	"strconv"
 )
 
 type PM2Service interface {
@@ -18,33 +19,58 @@ type PM2Service interface {
 	FetchContainerLogs(id int, lines int) (string, error)
 }
 
-type pm2Service struct{}
+type pm2Service struct {
+	client   *pm2pkg.Client
+	dialErr  error // surfaced to callers when the client never came up
+}
 
-func NewPM2Service() PM2Service {
-	return &pm2Service{}
+// NewPM2Service connects to the host PM2 daemon via its unix socket.
+// The socket path is the value of PM2_SOCKET_PATH (e.g. /root/.pm2/rpc.sock
+// when /root/.pm2 is bind-mounted from the host).
+func NewPM2Service(socketPath string) PM2Service {
+	c, err := pm2pkg.Dial(socketPath)
+	if err != nil {
+		log.Printf("pm2 service: dial %s failed: %v", socketPath, err)
+		return &pm2Service{client: nil, dialErr: err}
+	}
+	return &pm2Service{client: c}
+}
+
+func (s *pm2Service) notReady() error {
+	if s.dialErr != nil {
+		return errors.New(503, fmt.Sprintf("pm2 daemon unreachable: %s", s.dialErr))
+	}
+	return errors.New(503, "pm2 daemon unreachable")
 }
 
 func (s *pm2Service) List() ([]models.PM2Process, error) {
-	cmd := exec.Command("pm2", "jlist")
-	out, err := cmd.Output()
+	if s.client == nil {
+		return nil, s.notReady()
+	}
+	raw, err := s.client.GetMonitorData()
 	if err != nil {
 		return nil, err
 	}
-
-	var processes []models.PM2Process
-	if err := json.Unmarshal(out, &processes); err != nil {
-		return nil, err
+	procs := make([]models.PM2Process, 0, len(raw))
+	for _, r := range raw {
+		var p models.PM2Process
+		if err := json.Unmarshal(r, &p); err != nil {
+			return nil, fmt.Errorf("pm2: decode process: %w", err)
+		}
+		procs = append(procs, p)
 	}
-
-	return processes, nil
+	return procs, nil
 }
 
 func (s *pm2Service) FindPM2ProcessByID(id int) (*models.PM2Process, error) {
-	processes, err := s.List()
+	if s.client == nil {
+		return nil, s.notReady()
+	}
+	procs, err := s.List()
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range processes {
+	for _, p := range procs {
 		if p.PMID == id {
 			return &p, nil
 		}
@@ -53,69 +79,37 @@ func (s *pm2Service) FindPM2ProcessByID(id int) (*models.PM2Process, error) {
 }
 
 func (s *pm2Service) StartPM2ProcessByID(id int) error {
-	process, err := s.FindPM2ProcessByID(id)
-	if err != nil {
-		return err
+	if s.client == nil {
+		return s.notReady()
 	}
-	cmd := exec.Command("pm2", "start", strconv.Itoa(process.PMID))
-	_, err = cmd.Output()
-	fmt.Printf("Error starting process %d: %v\n", id, err)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.client.StartProcessID(id)
 }
 
 func (s *pm2Service) StopPM2ProcessByID(id int) error {
-	process, err := s.FindPM2ProcessByID(id)
-	if err != nil {
-		return err
+	if s.client == nil {
+		return s.notReady()
 	}
-	cmd := exec.Command("pm2", "stop", strconv.Itoa(process.PMID))
-	_, err = cmd.Output()
-	fmt.Printf("Error stopping process %d: %v\n", id, err)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.client.StopProcessID(id)
 }
 
 func (s *pm2Service) RestartPM2ProcessByID(id int) error {
-	process, err := s.FindPM2ProcessByID(id)
-	if err != nil {
-		return err
+	if s.client == nil {
+		return s.notReady()
 	}
-	cmd := exec.Command("pm2", "restart", strconv.Itoa(process.PMID))
-	_, err = cmd.Output()
-	fmt.Printf("Error restarting process %d: %v\n", id, err)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.client.RestartProcessID(id)
 }
 
 func (s *pm2Service) FetchContainerLogs(id int, lines int) (string, error) {
-	process, err := s.FindPM2ProcessByID(id)
+	if s.client == nil {
+		return "", s.notReady()
+	}
+	out, err := s.client.TailLogs(id, lines)
 	if err != nil {
+		// Mirror pm2-cli behaviour: missing log file is not fatal.
+		if err.Error() == "no process found" {
+			return "", errors.ErrNotFound
+		}
 		return "", err
 	}
-	cmd := exec.Command(
-		"pm2",
-		"logs",
-		strconv.Itoa(process.PMID),
-		"--lines",
-		strconv.Itoa(lines),
-		"--nostream",
-	)
-
-	out, err := cmd.Output()
-	if err != nil {
-		fmt.Printf("Error fetching logs process %d: %v\n", id, err)
-		return "", err
-	}
-
-	return string(out[1:]), nil
+	return out, nil
 }

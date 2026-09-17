@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"server-monitoring/internal/services"
 	"server-monitoring/pkg/errors"
@@ -39,6 +40,7 @@ func (h *dockerHandler) GetDockerImages(c *gin.Context) {
 func (h *dockerHandler) GetDockerContainers(c *gin.Context) {
 	containers, err := h.service.ContainersList(true)
 	if err != nil {
+		fmt.Println(err)
 		switch e := err.(type) {
 		case *errors.AppError:
 			c.JSON(e.Code, gin.H{

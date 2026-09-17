@@ -1,10 +1,12 @@
 package v1
 
 import (
+	"server-monitoring/pkg/config"
+
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterV1Routes(r *gin.RouterGroup) {
+func RegisterV1Routes(r *gin.RouterGroup, cfg *config.Config) {
 	api := r.Group("/v1")
 
 	{
@@ -13,7 +15,7 @@ func RegisterV1Routes(r *gin.RouterGroup) {
 		RegisterDockerRoutes(api)
 		RegisterReportRoutes(api)
 		RegisterSystemRoutes(api)
-		RegisterPM2Routes(api)
+		RegisterPM2Routes(api, cfg)
 	}
 
 }

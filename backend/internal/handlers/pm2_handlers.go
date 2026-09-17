@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"server-monitoring/internal/services"
 	"server-monitoring/pkg/errors"
@@ -20,6 +21,7 @@ func NewPM2Handler(service services.PM2Service) *PM2Handler {
 func (h *PM2Handler) ProcessList(c *gin.Context) {
 	processes, err := h.service.List()
 	if err != nil {
+		fmt.Println(err)
 		switch e := err.(type) {
 		case *errors.AppError:
 			c.JSON(e.Code, gin.H{

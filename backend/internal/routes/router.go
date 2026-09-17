@@ -34,7 +34,7 @@ func Setup() *gin.Engine {
 	r := srv.Group("/api")
 
 	{
-		v1.RegisterV1Routes(r)
+		v1.RegisterV1Routes(r, cfg)
 	}
 	return srv
 }
