@@ -2,9 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 
 export const useRootStore = defineStore("root", () => {
-  const serverAddress = ref(
-    import.meta.env.VITE_SERVER_ADDRESS || "http://localhost:3000",
-  );
+  const serverAddress = ref(import.meta.env.VITE_SERVER_ADDRESS);
   const apiBaseUrl = ref(import.meta.env.VITE_API_BASE_URL || "/api");
   const apiTimeout = ref(Number(import.meta.env.VITE_API_TIME_OUT) || 3000);
   const environment = ref<"development" | "staging" | "production">(

@@ -1,0 +1,73 @@
+# --- VCS / metadata ---
+.git
+.gitignore
+.git/HEAD
+.git/index
+.git/refs
+.git/objects
+.git/logs
+
+# --- Editor / IDE ---
+.vscode
+.idea
+.cursor
+*.swp
+*.swo
+*~
+.DS_Store
+.history
+
+# --- Env files (anywhere) ---
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+load-ids.txt
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+log.txt
+
+# --- Backend (Go) ---
+/backend/tmp
+/backend/.air-tmp
+/backend/.vscode
+/backend/coverage
+/backend/*.test
+/backend/*.out
+
+# --- Frontend (Node / Vue) ---
+/frontend/node_modules
+/frontend/node_modules/
+/frontend/**/node_modules/**
+/frontend/dist
+/frontend/build
+/frontend/.nuxt
+/frontend/.next
+/frontend/.cache
+/frontend/parcel-cache
+/frontend/coverage
+/frontend/.nyc_output
+/frontend/.eslintcache
+/frontend/.tmp
+/frontend/.temp
+/frontend/types
+/frontend/server
+/frontend/service
+/frontend/tests
+/frontend/fixtures-pages
+/frontend/fixtures-apps
+/frontend/.netlify
+
+# --- Documentation noise ---
+README.md
+AGENTS.md
+data
+
+# --- Lock files we don't ship in build contexts ---
+# (kept when building because pnpm-lock.yaml IS needed for pnpm install)
