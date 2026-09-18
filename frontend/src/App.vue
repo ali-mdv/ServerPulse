@@ -1,11 +1,9 @@
 <template>
-  <div class="min-h-screen flex bg-background text-foreground">
-    <Toast />
+  <div class="min-h-screen bg-background text-foreground">
     <Layout />
   </div>
 </template>
 
 <script lang="ts" setup>
-import Toast from "primevue/toast";
 import Layout from "./components/Layout.vue";
 </script>

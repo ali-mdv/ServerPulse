@@ -35,19 +35,20 @@ export const primeVueConfig: PrimeVueConfiguration = {
       root: {
         class: "z-[60]",
       },
-      message: ({ state }) => ({
+      // The `message` pt section is applied by PrimeVue to the transition-group
+      // wrapper div, which is always rendered even when no toasts exist.
+      // Keep it visually empty so an inactive Toast container has zero footprint.
+      message: {
+        class: "",
+      },
+      // Per-message styling belongs on the `container` pt section (ToastMessage root).
+      container: ({ props }) => ({
         class: [
           "rounded-lg border bg-popover text-popover-foreground shadow-lg overflow-hidden mb-2",
-          state.messages?.length && [
-            state.messages[0].severity === "success" &&
-              "border-l-4 border-l-success",
-            state.messages[0].severity === "info" &&
-              "border-l-4 border-l-info",
-            state.messages[0].severity === "warn" &&
-              "border-l-4 border-l-warning",
-            state.messages[0].severity === "error" &&
-              "border-l-4 border-l-critical",
-          ],
+          props.message?.severity === "success" && "border-l-4 border-l-success",
+          props.message?.severity === "info" && "border-l-4 border-l-info",
+          props.message?.severity === "warn" && "border-l-4 border-l-warning",
+          props.message?.severity === "error" && "border-l-4 border-l-critical",
         ],
       }),
       messageContent: {

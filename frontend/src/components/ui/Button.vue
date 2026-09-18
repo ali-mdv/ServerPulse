@@ -1,20 +1,22 @@
 <template>
   <button
     :type="type"
-    :class="cn(buttonClasses, $attrs.class as string)"
+    :class="mergedClasses"
     :disabled="disabled || loading"
     :aria-busy="loading || undefined"
-    v-bind="$attrs"
+    v-bind="extraAttrs"
   >
     <Spinner v-if="loading" :size="spinnerSize" />
-    <slot v-else name="icon-left" />
-    <slot />
-    <slot name="icon-right" />
+    <template v-else>
+      <slot name="icon-left" />
+      <slot />
+      <slot name="icon-right" />
+    </template>
   </button>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useAttrs } from "vue";
 import { cn } from "@/lib/utils";
 import Spinner from "./Spinner.vue";
 
@@ -46,26 +48,40 @@ const props = withDefaults(defineProps<Props>(), {
   type: "button",
 });
 
-const buttonClasses = computed(() => {
-  const variantClass = {
-    primary: "btn-primary",
-    secondary: "btn-secondary",
-    outline: "btn-outline",
-    ghost: "btn-ghost",
-    destructive: "btn-destructive",
-    success: "btn-success",
-    danger: "btn-danger",
-    info: "btn-info",
-  }[props.variant];
+defineOptions({ inheritAttrs: false });
+const attrs = useAttrs();
 
-  const sizeClass = {
-    sm: "btn-sm",
-    md: "btn-md",
-    lg: "btn-lg",
-    icon: "btn-icon",
-  }[props.size];
+const variantClass = computed(
+  () =>
+    ({
+      primary: "btn-primary",
+      secondary: "btn-secondary",
+      outline: "btn-outline",
+      ghost: "btn-ghost",
+      destructive: "btn-destructive",
+      success: "btn-success",
+      danger: "btn-danger",
+      info: "btn-info",
+    })[props.variant],
+);
 
-  return cn(variantClass, sizeClass);
+const sizeClass = computed(
+  () =>
+    ({
+      sm: "btn-sm",
+      md: "btn-md",
+      lg: "btn-lg",
+      icon: "btn-icon",
+    })[props.size],
+);
+
+const mergedClasses = computed(() =>
+  cn(variantClass.value, sizeClass.value, attrs.class as string | undefined),
+);
+
+const extraAttrs = computed(() => {
+  const { class: _c, ...rest } = attrs as Record<string, unknown>;
+  return rest;
 });
 
 const spinnerSize = computed(

@@ -129,6 +129,7 @@ import Badge from "@/components/ui/Badge.vue";
 import Button from "@/components/ui/Button.vue";
 import Skeleton from "@/components/ui/Skeleton.vue";
 import { useChartTheme } from "@/composables";
+import { withAlpha } from "@/lib/chart-theme";
 
 const chartTheme = useChartTheme();
 
@@ -153,8 +154,7 @@ const cpuChart = computed(() => ({
     {
       label: "CPU",
       data: cpuHistory.value.slice(),
-      borderColor: "hsl(var(--critical))",
-      backgroundColor: "hsla(var(--critical) / 0.08)",
+      borderColor: chartTheme.value.critical,
       tension: 0.3,
     },
   ],
@@ -165,8 +165,7 @@ const memChart = computed(() => ({
     {
       label: "Mem",
       data: memHistory.value.slice(),
-      borderColor: "hsl(var(--info))",
-      backgroundColor: "hsla(var(--info) / 0.08)",
+      borderColor: chartTheme.value.info,
       tension: 0.3,
     },
   ],
@@ -177,14 +176,14 @@ const netChart = computed(() => ({
     {
       label: "Net",
       data: netHistory.value.slice(),
-      borderColor: "hsl(var(--success))",
-      backgroundColor: "hsla(var(--success) / 0.08)",
+      borderColor: chartTheme.value.success,
       tension: 0.3,
     },
   ],
 }));
 
 const cpuOption = computed(() => ({
+  animation: false,
   tooltip: {
     trigger: "axis",
     backgroundColor: chartTheme.value.popover,
@@ -207,13 +206,26 @@ const cpuOption = computed(() => ({
       data: cpuChart.value.datasets[0].data,
       smooth: true,
       symbol: "none",
-      lineStyle: { color: cpuChart.value.datasets[0].borderColor, width: 2 },
-      areaStyle: { color: cpuChart.value.datasets[0].backgroundColor },
+      lineStyle: { color: cpuChart.value.datasets[0].borderColor, width: 2.5 },
+      areaStyle: {
+        color: {
+          type: "linear",
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: withAlpha(chartTheme.value.critical, 0.33) },
+            { offset: 1, color: withAlpha(chartTheme.value.critical, 0) },
+          ],
+        },
+      },
     },
   ],
 }));
 
 const memOption = computed(() => ({
+  animation: false,
   tooltip: {
     trigger: "axis",
     backgroundColor: chartTheme.value.popover,
@@ -236,13 +248,26 @@ const memOption = computed(() => ({
       data: memChart.value.datasets[0].data,
       smooth: true,
       symbol: "none",
-      lineStyle: { color: memChart.value.datasets[0].borderColor, width: 2 },
-      areaStyle: { color: memChart.value.datasets[0].backgroundColor },
+      lineStyle: { color: memChart.value.datasets[0].borderColor, width: 2.5 },
+      areaStyle: {
+        color: {
+          type: "linear",
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: withAlpha(chartTheme.value.info, 0.33) },
+            { offset: 1, color: withAlpha(chartTheme.value.info, 0) },
+          ],
+        },
+      },
     },
   ],
 }));
 
 const netOption = computed(() => ({
+  animation: false,
   tooltip: {
     trigger: "axis",
     backgroundColor: chartTheme.value.popover,
@@ -265,8 +290,20 @@ const netOption = computed(() => ({
       data: netChart.value.datasets[0].data,
       smooth: true,
       symbol: "none",
-      lineStyle: { color: netChart.value.datasets[0].borderColor, width: 2 },
-      areaStyle: { color: netChart.value.datasets[0].backgroundColor },
+      lineStyle: { color: netChart.value.datasets[0].borderColor, width: 2.5 },
+      areaStyle: {
+        color: {
+          type: "linear",
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: withAlpha(chartTheme.value.success, 0.33) },
+            { offset: 1, color: withAlpha(chartTheme.value.success, 0) },
+          ],
+        },
+      },
     },
   ],
 }));

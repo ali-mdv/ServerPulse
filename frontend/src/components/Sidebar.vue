@@ -1,5 +1,6 @@
 <template>
-  <Teleport to="body">
+  <!-- Mobile drawer: teleported to body so it overlays the page -->
+  <Teleport to="body" v-if="mobileOpen">
     <Transition
       enter-active-class="transition-opacity duration-200"
       leave-active-class="transition-opacity duration-200"
@@ -34,21 +35,21 @@
         />
       </aside>
     </Transition>
-
-    <aside
-      :class="[
-        'hidden md:flex sticky top-0 h-screen bg-sidebar text-sidebar-foreground p-4 flex-col transition-all duration-200 overflow-hidden',
-        collapsed ? 'md:w-20' : 'md:w-64',
-      ]"
-      aria-label="Primary navigation"
-    >
-      <SidebarBody :collapsed="collapsed" @toggle="$emit('toggle')" />
-    </aside>
   </Teleport>
+
+  <!-- Desktop rail: stays in document flow so it can be a flex sibling -->
+  <aside
+    :class="[
+      'hidden md:flex sticky top-0 self-start h-screen bg-sidebar text-sidebar-foreground p-4 flex-col transition-all duration-200 overflow-hidden shrink-0',
+      collapsed ? 'md:w-20' : 'md:w-64',
+    ]"
+    aria-label="Primary navigation"
+  >
+    <SidebarBody :collapsed="collapsed" @toggle="$emit('toggle')" />
+  </aside>
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onUnmounted } from "vue";
 import SidebarBody from "./SidebarBody.vue";
 
 defineProps<{
@@ -60,17 +61,4 @@ defineEmits<{
   toggle: [];
   close: [];
 }>();
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") {
-    document.dispatchEvent(new CustomEvent("sidebar-close"));
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("keydown", onKeydown);
-});
-onUnmounted(() => {
-  document.removeEventListener("keydown", onKeydown);
-});
 </script>

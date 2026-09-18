@@ -30,7 +30,7 @@
         <Skeleton height="1rem" width="60%" />
         <Skeleton height="240px" />
       </div>
-      <v-chart v-else :option="cpuOption" style="height: 260px; width: 100%" />
+      <v-chart v-else :option="cpuOption" :autoresize="true" style="height: 260px; width: 100%" />
     </Card>
 
     <!-- MEMORY & DISK -->
@@ -41,7 +41,7 @@
           <Skeleton height="1rem" width="60%" />
           <Skeleton height="220px" />
         </div>
-        <v-chart v-else :option="memOption" style="height: 240px; width: 100%" />
+        <v-chart v-else :option="memOption" :autoresize="true" style="height: 240px; width: 100%" />
       </Card>
 
       <Card>
@@ -50,7 +50,7 @@
           <Skeleton height="1rem" width="60%" />
           <Skeleton height="220px" />
         </div>
-        <v-chart v-else :option="diskOption" style="height: 240px; width: 100%" />
+        <v-chart v-else :option="diskOption" :autoresize="true" style="height: 240px; width: 100%" />
       </Card>
     </div>
 
@@ -59,13 +59,13 @@
       <Card>
         <h3 class="font-semibold mb-2">Network Sent (KB/s)</h3>
         <Skeleton v-if="usageLoading" height="120px" />
-        <v-chart v-else :option="netSendOption" class="h-32 w-full" />
+        <v-chart v-else :option="netSendOption" :autoresize="true" class="h-32 w-full" />
       </Card>
 
       <Card>
         <h3 class="font-semibold mb-2">Network Received (KB/s)</h3>
         <Skeleton v-if="usageLoading" height="120px" />
-        <v-chart v-else :option="netReceivedOption" class="h-32 w-full" />
+        <v-chart v-else :option="netReceivedOption" :autoresize="true" class="h-32 w-full" />
       </Card>
     </div>
 
@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted, ref } from "vue";
+import { reactive, computed, onMounted, ref, watchEffect } from "vue";
 import { useToast } from "primevue/usetoast";
 import { Server, Activity, AlertTriangle, CircleSlash } from "lucide-vue-next";
 import Card from "@/components/Card.vue";
@@ -118,6 +118,7 @@ import Skeleton from "@/components/ui/Skeleton.vue";
 import Badge from "@/components/ui/Badge.vue";
 import { useChartTheme } from "@/composables";
 import { fetchServers } from "@/api/servers";
+import { withAlpha } from "@/lib/chart-theme";
 
 const toast = useToast();
 const systemStore = useSystemStore();
@@ -159,23 +160,29 @@ const cpuData = reactive({
   values: Array(12).fill(0),
 });
 
-const cpuOption = computed(() => ({
+const cpuOption = ref({
+  animation: false,
   tooltip: {
     trigger: "axis",
     backgroundColor: chartTheme.value.popover,
     borderColor: chartTheme.value.border,
+    borderWidth: 1,
     textStyle: { color: chartTheme.value.text },
+    extraCssText:
+      "box-shadow: 0 4px 12px rgba(0,0,0,0.25); border-radius: 6px;",
   },
+  grid: { left: 40, right: 16, top: 16, bottom: 28 },
   xAxis: {
     type: "category",
     data: cpuData.labels,
     axisLine: { lineStyle: { color: chartTheme.value.border } },
-    axisLabel: { color: chartTheme.value.textMuted },
+    axisLabel: { color: chartTheme.value.textMuted, fontSize: 11 },
+    axisTick: { lineStyle: { color: chartTheme.value.border } },
   },
   yAxis: {
     type: "value",
-    splitLine: { lineStyle: { color: chartTheme.value.border } },
-    axisLabel: { color: chartTheme.value.textMuted },
+    splitLine: { lineStyle: { color: chartTheme.value.border, type: "dashed" } },
+    axisLabel: { color: chartTheme.value.textMuted, fontSize: 11 },
   },
   series: [
     {
@@ -183,11 +190,48 @@ const cpuOption = computed(() => ({
       type: "line",
       data: cpuData.values,
       smooth: true,
-      lineStyle: { color: "hsl(var(--info))" },
-      areaStyle: { color: "hsla(var(--info) / 0.1)" },
+      symbol: "circle",
+      symbolSize: 6,
+      showSymbol: cpuData.values.some((v) => v > 0),
+      lineStyle: { color: chartTheme.value.info, width: 2.5 },
+      itemStyle: { color: chartTheme.value.info, borderColor: chartTheme.value.popover, borderWidth: 2 },
+      areaStyle: {
+        color: {
+          type: "linear",
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: withAlpha(chartTheme.value.info, 0.33) },
+            { offset: 1, color: withAlpha(chartTheme.value.info, 0) },
+          ],
+        },
+      },
     },
   ],
-}));
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const opt = cpuOption.value;
+  opt.tooltip.backgroundColor = theme.popover;
+  opt.tooltip.borderColor = theme.border;
+  opt.tooltip.textStyle.color = theme.text;
+  opt.xAxis.data = cpuData.labels;
+  opt.xAxis.axisLine.lineStyle.color = theme.border;
+  opt.xAxis.axisLabel.color = theme.textMuted;
+  opt.xAxis.axisTick.lineStyle.color = theme.border;
+  opt.yAxis.splitLine.lineStyle.color = theme.border;
+  opt.yAxis.axisLabel.color = theme.textMuted;
+  opt.series[0].data = cpuData.values;
+  opt.series[0].showSymbol = cpuData.values.some((v) => v > 0);
+  opt.series[0].lineStyle.color = theme.info;
+  opt.series[0].itemStyle.color = theme.info;
+  opt.series[0].itemStyle.borderColor = theme.popover;
+  opt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.info, 0.33);
+  opt.series[0].areaStyle.color.colorStops[1].color = withAlpha(theme.info, 0);
+});
 
 function updateCpu(cpuUsage: number) {
   const time = new Date().toLocaleTimeString([], {
@@ -211,7 +255,8 @@ const memData = reactive({
   free: 0,
 });
 
-const memOption = computed(() => ({
+const memOption = ref({
+  animation: false,
   tooltip: {
     trigger: "item",
     backgroundColor: chartTheme.value.popover,
@@ -235,13 +280,37 @@ const memOption = computed(() => ({
       radius: "75%",
       center: ["50%", "45%"],
       data: [
-        { value: memData.used, name: "Used", itemStyle: { color: "hsl(var(--info))" } },
-        { value: memData.free, name: "Free", itemStyle: { color: "hsl(var(--muted))" } },
+        {
+          value: memData.used,
+          name: "Used",
+          itemStyle: { color: chartTheme.value.info },
+        },
+        {
+          value: memData.free,
+          name: "Free",
+          itemStyle: { color: chartTheme.value.free },
+        },
       ],
       label: { color: chartTheme.value.text },
     },
   ],
-}));
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const opt = memOption.value;
+  opt.tooltip.backgroundColor = theme.popover;
+  opt.tooltip.borderColor = theme.border;
+  opt.tooltip.textStyle.color = theme.text;
+  opt.legend.textStyle.color = theme.textMuted;
+  opt.title.text = memData.title;
+  opt.title.textStyle.color = theme.text;
+  opt.series[0].data[0].value = memData.used;
+  opt.series[0].data[0].itemStyle.color = theme.info;
+  opt.series[0].data[1].value = memData.free;
+  opt.series[0].data[1].itemStyle.color = theme.free;
+  opt.series[0].label.color = theme.text;
+});
 
 function updateMemory(mem: UsageInfo) {
   const total = parseBytes(mem.total);
@@ -259,7 +328,8 @@ const diskData = reactive({
   free: 0,
 });
 
-const diskOption = computed(() => ({
+const diskOption = ref({
+  animation: false,
   tooltip: {
     trigger: "item",
     backgroundColor: chartTheme.value.popover,
@@ -283,13 +353,37 @@ const diskOption = computed(() => ({
       radius: "75%",
       center: ["50%", "45%"],
       data: [
-        { value: diskData.used, name: "Used", itemStyle: { color: "hsl(var(--warning))" } },
-        { value: diskData.free, name: "Free", itemStyle: { color: "hsl(var(--muted))" } },
+        {
+          value: diskData.used,
+          name: "Used",
+          itemStyle: { color: chartTheme.value.warning },
+        },
+        {
+          value: diskData.free,
+          name: "Free",
+          itemStyle: { color: chartTheme.value.free },
+        },
       ],
       label: { color: chartTheme.value.text },
     },
   ],
-}));
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const opt = diskOption.value;
+  opt.tooltip.backgroundColor = theme.popover;
+  opt.tooltip.borderColor = theme.border;
+  opt.tooltip.textStyle.color = theme.text;
+  opt.legend.textStyle.color = theme.textMuted;
+  opt.title.text = diskData.title;
+  opt.title.textStyle.color = theme.text;
+  opt.series[0].data[0].value = diskData.used;
+  opt.series[0].data[0].itemStyle.color = theme.warning;
+  opt.series[0].data[1].value = diskData.free;
+  opt.series[0].data[1].itemStyle.color = theme.free;
+  opt.series[0].label.color = theme.text;
+});
 
 function updateDiskUsageChart(diskUsage: UsageInfo) {
   const total = parseBytes(diskUsage.total, 1000);
@@ -306,6 +400,7 @@ const netReceived = ref<number[]>(Array(20).fill(0));
 
 function createNetOption(source: number[]) {
   return {
+    animation: false,
     tooltip: {
       trigger: "axis",
       backgroundColor: chartTheme.value.popover,
@@ -314,7 +409,6 @@ function createNetOption(source: number[]) {
     },
     xAxis: {
       type: "category",
-      data: source.map(() => ""),
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: { show: false },
@@ -332,15 +426,51 @@ function createNetOption(source: number[]) {
         data: source,
         smooth: true,
         symbol: "none",
-        lineStyle: { color: "hsl(var(--success))", width: 2 },
-        areaStyle: { color: "hsla(var(--success) / 0.08)" },
+        lineStyle: { color: chartTheme.value.success, width: 2 },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: withAlpha(chartTheme.value.success, 0.33) },
+              { offset: 1, color: withAlpha(chartTheme.value.success, 0) },
+            ],
+          },
+        },
       },
     ],
   };
 }
 
-const netSendOption = computed(() => createNetOption(netSent.value));
-const netReceivedOption = computed(() => createNetOption(netReceived.value));
+const netSendOption = ref(createNetOption(netSent.value));
+const netReceivedOption = ref(createNetOption(netReceived.value));
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const sendOpt = netSendOption.value;
+  sendOpt.tooltip.backgroundColor = theme.popover;
+  sendOpt.tooltip.borderColor = theme.border;
+  sendOpt.tooltip.textStyle.color = theme.text;
+  sendOpt.series[0].data = netSent.value;
+  sendOpt.series[0].lineStyle.color = theme.success;
+  sendOpt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.success, 0.33);
+  sendOpt.series[0].areaStyle.color.colorStops[1].color = withAlpha(theme.success, 0);
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const recvOpt = netReceivedOption.value;
+  recvOpt.tooltip.backgroundColor = theme.popover;
+  recvOpt.tooltip.borderColor = theme.border;
+  recvOpt.tooltip.textStyle.color = theme.text;
+  recvOpt.series[0].data = netReceived.value;
+  recvOpt.series[0].lineStyle.color = theme.success;
+  recvOpt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.success, 0.33);
+  recvOpt.series[0].areaStyle.color.colorStops[1].color = withAlpha(theme.success, 0);
+});
 
 function updateNetwork(io: NetIOInfo) {
   const sent = Math.round(io.sent / 1024);

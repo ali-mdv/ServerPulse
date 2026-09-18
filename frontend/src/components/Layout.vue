@@ -27,7 +27,19 @@
         Skip to content
       </a>
       <main id="main-content" tabindex="-1" class="flex-1 p-4 sm:p-6">
-        <router-view />
+        <router-view v-slot="{ Component, route }">
+          <Transition
+            enter-active-class="transition-all duration-200 ease-out"
+            enter-from-class="opacity-0 translate-y-2"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition-all duration-150 ease-in"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0"
+            mode="out-in"
+          >
+            <component :is="Component" :key="route.fullPath" />
+          </Transition>
+        </router-view>
       </main>
       <Toast />
     </div>
