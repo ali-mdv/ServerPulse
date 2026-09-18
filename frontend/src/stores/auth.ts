@@ -16,11 +16,10 @@ export const useAuthStore = defineStore("auth", () => {
     try {
       const response = await api.post("auth/login", { email, password });
       user.value = { email, token: response.data.token };
-      if (remember)
-        localStorage.setItem(
-          "auth",
-          JSON.stringify({ email, token: response.data.token }),
-        );
+      localStorage.setItem(
+        "auth",
+        JSON.stringify({ email, token: response.data.token }),
+      );
       return;
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -76,10 +75,8 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   function getToken() {
-    if (user.value.token) {
-      return `Bearer ${user.value.token}`;
-    }
-    return "";
+    if (!user.value?.token) return "";
+    return `Bearer ${user.value.token}`;
   }
 
   return {
