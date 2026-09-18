@@ -1,73 +1,68 @@
 <template>
-  <div class="w-full">
-    <h2 class="text-2xl font-semibold mb-4">Add User</h2>
-    <div class="bg-card p-6 rounded shadow">
-      <form @submit.prevent="onSubmit" class="grid gap-4">
-        <label class="flex flex-col">
-          <span class="text-sm font-medium mb-1">Email</span>
-          <input
+  <div class="space-y-6 max-w-xl">
+    <PageHeader
+      title="Add User"
+      subtitle="Create a new account for someone on your team."
+    />
+
+    <Card>
+      <form @submit.prevent="onSubmit" class="space-y-4" novalidate>
+        <div class="space-y-1.5">
+          <label for="add-email" class="text-sm font-medium">Email</label>
+          <Input
+            id="add-email"
             v-model="email"
             type="email"
-            class="border rounded px-3 py-2"
+            autocomplete="email"
+            :invalid="!!emailError"
+            :disabled="submitting"
           />
-          <ErrorMessage name="email" v-slot="{ message }"
-            ><div class="text-sm text-red-600 mt-1">
-              {{ message }}
-            </div></ErrorMessage
-          >
-        </label>
+          <ErrorMessage name="email" v-slot="{ message }">
+            <p class="text-xs text-critical mt-1">{{ message }}</p>
+          </ErrorMessage>
+        </div>
 
-        <label class="flex flex-col">
-          <span class="text-sm font-medium mb-1">Password</span>
-          <div class="relative">
-            <input
-              :type="showPassword ? 'text' : 'password'"
-              v-model="password"
-              class="border rounded px-3 py-2 w-full pr-10"
-              minlength="6"
-            />
-            <button
-              type="button"
-              @click="showPassword = !showPassword"
-              :aria-pressed="showPassword"
-              aria-label="Toggle password visibility"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-primary"
-            >
-              <Eye v-if="!showPassword" class="w-5 h-5" />
-              <EyeOff v-else class="w-5 h-5" />
-            </button>
-          </div>
-          <ErrorMessage name="password" v-slot="{ message }"
-            ><div class="text-sm text-red-600 mt-1">
-              {{ message }}
-            </div></ErrorMessage
-          >
-        </label>
+        <div class="space-y-1.5">
+          <label for="add-password" class="text-sm font-medium">Password</label>
+          <PasswordInput
+            id="add-password"
+            v-model="password"
+            autocomplete="new-password"
+            :invalid="!!passwordError"
+            :disabled="submitting"
+          />
+          <ErrorMessage name="password" v-slot="{ message }">
+            <p class="text-xs text-critical mt-1">{{ message }}</p>
+          </ErrorMessage>
+        </div>
 
-        <div class="flex gap-3 mt-4">
-          <button type="submit" class="px-4 py-2 bg-primary text-white rounded">
-            Create
-          </button>
-          <router-link to="/users" class="px-4 py-2 border rounded">
-            Cancel
+        <div class="flex gap-3 pt-2">
+          <Button type="submit" variant="primary" :loading="submitting">
+            {{ submitting ? "Creating…" : "Create user" }}
+          </Button>
+          <router-link to="/users">
+            <Button variant="outline" type="button">Cancel</Button>
           </router-link>
         </div>
       </form>
-    </div>
+    </Card>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
-import { Eye, EyeOff } from "lucide-vue-next";
 import { useToast } from "primevue/usetoast";
 import { useForm, useField, ErrorMessage } from "vee-validate";
 import * as yup from "yup";
 import { useUsersStore } from "@/stores/users";
+import Card from "@/components/Card.vue";
+import Input from "@/components/ui/Input.vue";
+import PasswordInput from "@/components/ui/PasswordInput.vue";
+import Button from "@/components/ui/Button.vue";
+import PageHeader from "@/components/ui/PageHeader.vue";
 
 const toast = useToast();
-
 const router = useRouter();
 
 const schema = yup.object({
@@ -78,11 +73,14 @@ const schema = yup.object({
     .required("Password is required"),
 });
 
-const { handleSubmit } = useForm({ validationSchema: schema });
+const { handleSubmit, errors } = useForm({ validationSchema: schema });
 
 const { value: email } = useField<string>("email");
 const { value: password } = useField<string>("password");
-const showPassword = ref(false);
+const submitting = ref(false);
+
+const emailError = computed(() => errors.value.email);
+const passwordError = computed(() => errors.value.password);
 
 const userStore = useUsersStore();
 
@@ -91,6 +89,7 @@ const onSubmit = handleSubmit(() => {
 });
 
 async function submitForm() {
+  submitting.value = true;
   try {
     const user = await userStore.addUser(email.value, password.value);
     toast.add({
@@ -100,14 +99,15 @@ async function submitForm() {
       life: 3000,
     });
     router.push("/users");
-  } catch (err) {
-    console.log(err);
+  } catch (err: any) {
     toast.add({
       severity: "error",
       summary: "Error",
       detail: err.message,
       life: 3000,
     });
+  } finally {
+    submitting.value = false;
   }
 }
 </script>

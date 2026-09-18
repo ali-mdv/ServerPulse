@@ -1,103 +1,204 @@
 <template>
-  <div class="space-y-6 w-full max-w-full">
-    <h2 class="text-2xl font-semibold">Settings</h2>
+  <div class="space-y-6 max-w-2xl">
+    <PageHeader
+      title="Settings"
+      subtitle="Manage your preferences and connections."
+    />
 
-    <div class="bg-card p-4 rounded border">
-      <h3 class="font-semibold mb-2">Appearance</h3>
-      <div class="flex items-center gap-4">
-        <label class="flex items-center gap-2">
-          <input type="radio" value="system" v-model="theme" /> System
-        </label>
-        <label class="flex items-center gap-2">
-          <input type="radio" value="light" v-model="theme" /> Light
-        </label>
-        <label class="flex items-center gap-2">
-          <input type="radio" value="dark" v-model="theme" /> Dark
-        </label>
-      </div>
-    </div>
+    <form @submit.prevent="onSave" novalidate>
+      <div class="space-y-6">
+        <Card>
+          <h3 class="font-semibold mb-3">Appearance</h3>
+          <fieldset class="space-y-2">
+            <legend class="sr-only">Theme preference</legend>
+            <label
+              v-for="opt in themeOptions"
+              :key="opt.value"
+              class="flex items-center gap-2 text-sm cursor-pointer"
+            >
+              <input
+                type="radio"
+                :value="opt.value"
+                v-model="themeValue"
+                name="theme"
+              />
+              {{ opt.label }}
+            </label>
+          </fieldset>
+        </Card>
 
-    <div class="bg-card p-4 rounded border">
-      <h3 class="font-semibold mb-2">Preferences</h3>
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="font-medium">Metrics refresh interval</div>
-          <div class="text-sm text-muted">How frequently metrics auto-refresh</div>
+        <Card>
+          <h3 class="font-semibold mb-3">Preferences</h3>
+          <div
+            class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          >
+            <div>
+              <div class="text-sm font-medium">Metrics refresh interval</div>
+              <div class="text-xs text-muted-foreground">
+                How frequently metrics auto-refresh.
+              </div>
+            </div>
+            <Select
+              v-model.number="refreshInterval"
+              aria-label="Refresh interval"
+              class="w-auto"
+            >
+              <option :value="5">5 seconds</option>
+              <option :value="10">10 seconds</option>
+              <option :value="30">30 seconds</option>
+            </Select>
+          </div>
+          <ErrorMessage name="refreshInterval" v-slot="{ message }">
+            <p class="text-xs text-critical mt-2">{{ message }}</p>
+          </ErrorMessage>
+        </Card>
+
+        <Card>
+          <h3 class="font-semibold mb-3">Connections</h3>
+          <div class="space-y-4">
+            <div class="space-y-1.5">
+              <label for="ws-endpoint" class="text-sm font-medium">
+                WebSocket endpoint
+              </label>
+              <Input
+                id="ws-endpoint"
+                v-model="wsEndpoint"
+                type="url"
+                :invalid="!!wsEndpointError"
+              />
+              <ErrorMessage name="wsEndpoint" v-slot="{ message }">
+                <p class="text-xs text-critical mt-1">{{ message }}</p>
+              </ErrorMessage>
+            </div>
+            <div class="space-y-1.5">
+              <label for="api-base" class="text-sm font-medium">
+                REST API base
+              </label>
+              <Input
+                id="api-base"
+                v-model="apiBase"
+                type="url"
+                :invalid="!!apiBaseError"
+              />
+              <ErrorMessage name="apiBase" v-slot="{ message }">
+                <p class="text-xs text-critical mt-1">{{ message }}</p>
+              </ErrorMessage>
+            </div>
+          </div>
+        </Card>
+
+        <div class="flex gap-3">
+          <Button type="submit" variant="primary" :loading="saving">
+            {{ saving ? "Saving…" : "Save changes" }}
+          </Button>
+          <Button type="button" variant="outline" @click="reset">
+            Reset
+          </Button>
         </div>
-        <select v-model.number="refreshInterval" class="border p-2 rounded">
-          <option :value="5">5s</option>
-          <option :value="10">10s</option>
-          <option :value="30">30s</option>
-        </select>
       </div>
-    </div>
-
-    <div class="bg-card p-4 rounded border">
-      <h3 class="font-semibold mb-2">Connections</h3>
-      <div class="space-y-2">
-        <div>
-          <label class="block text-sm font-medium mb-1">WebSocket endpoint</label>
-          <input v-model="wsEndpoint" class="w-full border p-2 rounded" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">REST API base</label>
-          <input v-model="apiBase" class="w-full border p-2 rounded" />
-        </div>
-      </div>
-    </div>
-
-    <div class="flex gap-3">
-      <button @click="save" class="px-4 py-2 bg-primary text-primary-foreground rounded">Save</button>
-      <button @click="reset" class="px-4 py-2 border rounded">Reset</button>
-    </div>
+    </form>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, onMounted } from 'vue';
-import { useToast } from 'primevue/usetoast';
+import { ref, computed } from "vue";
+import { useToast } from "primevue/usetoast";
+import { useForm, useField, ErrorMessage } from "vee-validate";
+import * as yup from "yup";
+import { useTheme, type Theme } from "@/composables";
+import Card from "@/components/Card.vue";
+import Button from "@/components/ui/Button.vue";
+import Input from "@/components/ui/Input.vue";
+import Select from "@/components/ui/Select.vue";
+import PageHeader from "@/components/ui/PageHeader.vue";
+
 const toast = useToast();
+const { theme: themeValue, setTheme } = useTheme();
+const saving = ref(false);
 
-const theme = ref<'system'|'light'|'dark'>('system');
-const refreshInterval = ref<number>(10);
-const wsEndpoint = ref('wss://example.com/ws');
-const apiBase = ref('https://api.example.com');
+const themeOptions = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+] as const;
 
-onMounted(() => {
-  const saved = localStorage.getItem('settings');
-  if (saved) {
-    const s = JSON.parse(saved);
-    theme.value = s.theme || 'system';
-    refreshInterval.value = s.refreshInterval || 10;
-    wsEndpoint.value = s.wsEndpoint || wsEndpoint.value;
-    apiBase.value = s.apiBase || apiBase.value;
-    applyTheme();
-  }
+const schema = yup.object({
+  refreshInterval: yup
+    .number()
+    .oneOf([5, 10, 30], "Pick 5, 10 or 30 seconds")
+    .required(),
+  wsEndpoint: yup
+    .string()
+    .trim()
+    .url("Must be a valid URL")
+    .required("WebSocket endpoint is required"),
+  apiBase: yup
+    .string()
+    .trim()
+    .url("Must be a valid URL")
+    .required("REST API base is required"),
 });
 
-watch(theme, applyTheme);
+const { handleSubmit, errors, setValues } = useForm({
+  validationSchema: schema,
+  initialValues: {
+    refreshInterval: 10,
+    wsEndpoint: "wss://example.com/ws",
+    apiBase: "https://api.example.com",
+  },
+});
 
-function applyTheme() {
-  if (theme.value === 'dark') document.documentElement.classList.add('dark');
-  else if (theme.value === 'light') document.documentElement.classList.remove('dark');
-  else {
-    // system
-    const prefers = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (prefers) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
+const { value: refreshInterval } = useField<number>("refreshInterval");
+const { value: wsEndpoint } = useField<string>("wsEndpoint");
+const { value: apiBase } = useField<string>("apiBase");
+
+const wsEndpointError = computed(() => errors.value.wsEndpoint);
+const apiBaseError = computed(() => errors.value.apiBase);
+
+function loadFromStorage() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const raw = localStorage.getItem("settings");
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    setValues({
+      refreshInterval: s.refreshInterval ?? 10,
+      wsEndpoint: s.wsEndpoint ?? "wss://example.com/ws",
+      apiBase: s.apiBase ?? "https://api.example.com",
+    });
+  } catch {
+    /* ignore */
   }
 }
 
-function save() {
-  localStorage.setItem('settings', JSON.stringify({ theme: theme.value, refreshInterval: refreshInterval.value, wsEndpoint: wsEndpoint.value, apiBase: apiBase.value }));
-  toast.add({ severity: 'success', summary: 'Saved', detail: 'Settings saved', life: 3000 });
-}
+loadFromStorage();
+
+const onSave = handleSubmit((values) => {
+  saving.value = true;
+  const payload = {
+    theme: themeValue.value as Theme,
+    refreshInterval: values.refreshInterval,
+    wsEndpoint: values.wsEndpoint,
+    apiBase: values.apiBase,
+  };
+  localStorage.setItem("settings", JSON.stringify(payload));
+  setTheme(payload.theme);
+  window.dispatchEvent(new CustomEvent("settings-updated", { detail: payload }));
+  toast.add({
+    severity: "success",
+    summary: "Saved",
+    detail: "Settings saved",
+    life: 3000,
+  });
+  saving.value = false;
+});
 
 function reset() {
-  theme.value = 'system';
-  refreshInterval.value = 10;
-  wsEndpoint.value = 'wss://example.com/ws';
-  apiBase.value = 'https://api.example.com';
-  applyTheme();
+  themeValue.value = "system";
+  setValues({
+    refreshInterval: 10,
+    wsEndpoint: "wss://example.com/ws",
+    apiBase: "https://api.example.com",
+  });
 }
 </script>

@@ -13,20 +13,47 @@ import {
   GetLogsApi,
 } from "@/types/system";
 
+const SETTINGS_KEY = "settings";
+
+function readStoredInterval(): number {
+  if (typeof localStorage === "undefined") return 10000;
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return 10000;
+    const parsed = JSON.parse(raw);
+    const v = Number(parsed?.refreshInterval);
+    if (!Number.isFinite(v) || v <= 0) return 10000;
+    return v * 1000;
+  } catch {
+    return 10000;
+  }
+}
+
 export const useSystemStore = defineStore("system", () => {
   const api = useApi();
   const authStore = useAuthStore();
 
-  const intervalMS = ref<number>(10000);
+  const intervalMS = ref<number>(readStoredInterval());
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("settings-updated", (e: Event) => {
+      const detail = (e as CustomEvent<{ refreshInterval?: number }>).detail;
+      if (detail?.refreshInterval && detail.refreshInterval > 0) {
+        intervalMS.value = detail.refreshInterval * 1000;
+      }
+    });
+    window.addEventListener("storage", (e) => {
+      if (e.key === SETTINGS_KEY) {
+        intervalMS.value = readStoredInterval();
+      }
+    });
+  }
 
   async function fetchSystemUsage(): Promise<SystemUsage> {
     try {
       const response = await api.get<GetSystemUsageApi>("system/monit", {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
-
       return response.data.systemUsage;
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -41,9 +68,7 @@ export const useSystemStore = defineStore("system", () => {
   async function fetchPM2Services(): Promise<PM2Service[]> {
     try {
       const response = await api.get<GetPm2ServicesList>("pm2/services", {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
       return response.data.processes;
     } catch (err) {
@@ -61,9 +86,7 @@ export const useSystemStore = defineStore("system", () => {
       const response = await api.get<GetDockerContainersList>(
         "docker/containers",
         {
-          headers: {
-            Authorization: authStore.getToken(),
-          },
+          headers: { Authorization: authStore.getToken() },
         },
       );
       return response.data.containers;
@@ -80,9 +103,7 @@ export const useSystemStore = defineStore("system", () => {
   async function startDockerContainer(container: DockerContainer) {
     try {
       await api.get(`docker/containers/${container.id}/start`, {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -99,9 +120,7 @@ export const useSystemStore = defineStore("system", () => {
   async function stopDockerContainer(container: DockerContainer) {
     try {
       await api.get(`docker/containers/${container.id}/stop`, {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -118,9 +137,7 @@ export const useSystemStore = defineStore("system", () => {
   async function restartDockerContainer(container: DockerContainer) {
     try {
       await api.get(`docker/containers/${container.id}/restart`, {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -139,9 +156,7 @@ export const useSystemStore = defineStore("system", () => {
       const response = await api.get<GetLogsApi>(
         `docker/containers/${container.id}/logs`,
         {
-          headers: {
-            Authorization: authStore.getToken(),
-          },
+          headers: { Authorization: authStore.getToken() },
         },
       );
       return response.data.logs;
@@ -162,9 +177,7 @@ export const useSystemStore = defineStore("system", () => {
   async function startPM2Service(service: PM2Service) {
     try {
       await api.get(`pm2/services/${service.pm_id}/start`, {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -181,9 +194,7 @@ export const useSystemStore = defineStore("system", () => {
   async function stopPM2Service(service: PM2Service) {
     try {
       await api.get(`pm2/services/${service.pm_id}/stop`, {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -200,9 +211,7 @@ export const useSystemStore = defineStore("system", () => {
   async function restartPM2Service(service: PM2Service) {
     try {
       await api.get(`pm2/services/${service.pm_id}/restart`, {
-        headers: {
-          Authorization: authStore.getToken(),
-        },
+        headers: { Authorization: authStore.getToken() },
       });
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -221,9 +230,7 @@ export const useSystemStore = defineStore("system", () => {
       const response = await api.get<GetLogsApi>(
         `pm2/services/${service.pm_id}/logs`,
         {
-          headers: {
-            Authorization: authStore.getToken(),
-          },
+          headers: { Authorization: authStore.getToken() },
         },
       );
       return response.data.logs;

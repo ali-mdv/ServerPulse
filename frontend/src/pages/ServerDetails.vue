@@ -1,63 +1,115 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-2xl font-semibold">{{ server?.name || 'Server details' }}</h2>
-        <div class="text-sm text-muted">Status: {{ server?.status || 'unknown' }}</div>
-      </div>
-      <div>
-        <router-link to="/servers" class="px-3 py-1 border rounded">Back</router-link>
-      </div>
+    <PageHeader
+      :title="server?.name || 'Server details'"
+      :subtitle="`Status: ${server?.status || 'unknown'}`"
+    >
+      <template #default>
+        <Badge v-if="server?.status" :tone="statusTone">
+          {{ server.status }}
+        </Badge>
+        <router-link to="/servers">
+          <Button variant="outline" size="sm">
+            <ChevronLeft class="w-4 h-4" aria-hidden="true" />
+            Back to servers
+          </Button>
+        </router-link>
+      </template>
+    </PageHeader>
+
+    <div
+      v-if="loading"
+      class="grid gap-3"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading server"
+    >
+      <Skeleton height="11rem" />
+      <Skeleton height="11rem" />
     </div>
 
-    <div v-if="loading" class="p-6 bg-card rounded">Loading...</div>
-    <div v-else-if="!server" class="p-6 bg-card rounded">Server not found.</div>
+    <EmptyState
+      v-else-if="!server"
+      title="Server not found"
+      description="Check the URL or pick a different server."
+    />
 
     <div v-else class="space-y-4">
-      <!-- Global charts -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="col-span-1 bg-card p-4 rounded border h-44">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Card class="h-44">
           <h3 class="font-semibold mb-2">CPU Usage</h3>
-          <v-chart :option="cpuOption" style="height:120px; width:100%" />
-        </div>
-        <div class="col-span-1 bg-card p-4 rounded border h-44">
+          <v-chart :option="cpuOption" style="height: 120px; width: 100%" />
+        </Card>
+        <Card class="h-44">
           <h3 class="font-semibold mb-2">Memory Usage</h3>
-          <v-chart :option="memOption" style="height:120px; width:100%" />
-        </div>
-        <div class="col-span-1 bg-card p-4 rounded border h-44">
+          <v-chart :option="memOption" style="height: 120px; width: 100%" />
+        </Card>
+        <Card class="h-44">
           <h3 class="font-semibold mb-2">Network Traffic (KB/s)</h3>
-          <v-chart :option="netOption" style="height:120px; width:100%" />
-        </div>
+          <v-chart :option="netOption" style="height: 120px; width: 100%" />
+        </Card>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="col-span-2 space-y-4">
-          <div class="bg-card p-4 rounded border">
+        <div class="lg:col-span-2 space-y-4">
+          <Card>
             <h3 class="font-semibold mb-2">Overview</h3>
-            <div class="flex gap-4">
-              <div>CPU: <span class="font-bold">{{ server.cpu }}%</span></div>
-              <div>Memory: <span class="font-bold">{{ server.mem }}%</span></div>
-              <div>Network: <span class="font-bold">{{ latestNet }} KB/s</span></div>
-            </div>
-          </div>
+            <dl class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              <div>
+                <dt class="text-muted-foreground">CPU</dt>
+                <dd class="font-bold">{{ server.cpu }}%</dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Memory</dt>
+                <dd class="font-bold">{{ server.mem }}%</dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Network</dt>
+                <dd class="font-bold">{{ latestNet }} KB/s</dd>
+              </div>
+            </dl>
+          </Card>
 
-          <ServiceManagerPanel :pm2="server.pm2" :docker="server.docker" />
+          <ServiceManagerPanel
+            :services="server.pm2 || []"
+            :containers="server.docker || []"
+          />
         </div>
 
         <div class="space-y-4">
-          <div class="bg-card p-4 rounded border">
+          <Card>
             <h3 class="font-semibold mb-2">Alerts</h3>
-            <div v-for="a in alerts" :key="a.id" class="p-2 border-b last:border-b-0">
-              <div class="font-medium">{{ a.title }}</div>
-              <div class="text-sm text-muted">{{ a.time }}</div>
-            </div>
-          </div>
+            <EmptyState
+              v-if="alerts.length === 0"
+              title="No alerts"
+              description="Nothing has been triggered for this server."
+              class="!border-0 !shadow-none !p-2"
+            />
+            <ul v-else class="divide-y divide-border">
+              <li
+                v-for="a in alerts"
+                :key="a.id"
+                class="py-2 first:pt-0 last:pb-0"
+              >
+                <div class="font-medium">{{ a.title }}</div>
+                <div class="text-xs text-muted-foreground">{{ a.time }}</div>
+              </li>
+            </ul>
+          </Card>
 
-          <div class="bg-card p-4 rounded border">
+          <Card>
             <h3 class="font-semibold mb-2">Service Summary</h3>
-            <div>Total PM2: {{ server.pm2?.length || 0 }}</div>
-            <div>Total Docker: {{ server.docker?.length || 0 }}</div>
-          </div>
+            <dl class="text-sm space-y-1">
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">PM2 processes</dt>
+                <dd class="font-medium">{{ server.pm2?.length || 0 }}</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">Docker containers</dt>
+                <dd class="font-medium">{{ server.docker?.length || 0 }}</dd>
+              </div>
+            </dl>
+          </Card>
         </div>
       </div>
     </div>
@@ -65,10 +117,20 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useRoute } from 'vue-router';
-import { fetchServer } from '@/api/servers';
-import ServiceManagerPanel from '@/components/ServiceManagerPanel.vue';
+import { ref, onMounted, onBeforeUnmount, computed } from "vue";
+import { useRoute } from "vue-router";
+import { ChevronLeft } from "lucide-vue-next";
+import { fetchServer } from "@/api/servers";
+import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
+import Card from "@/components/Card.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import PageHeader from "@/components/ui/PageHeader.vue";
+import Badge from "@/components/ui/Badge.vue";
+import Button from "@/components/ui/Button.vue";
+import Skeleton from "@/components/ui/Skeleton.vue";
+import { useChartTheme } from "@/composables";
+
+const chartTheme = useChartTheme();
 
 const route = useRoute();
 const id = route.params.id as string;
@@ -76,68 +138,173 @@ const server = ref<any | null>(null);
 const loading = ref(true);
 
 const alerts = ref([
-  { id: 'a1', title: 'High CPU detected', time: '10:12' },
-  { id: 'a2', title: 'Container restarted', time: '09:50' }
+  { id: "a1", title: "High CPU detected", time: "10:12" },
+  { id: "a2", title: "Container restarted", time: "09:50" },
 ]);
 
-// histories
 const cpuHistory = ref<number[]>([]);
 const memHistory = ref<number[]>([]);
 const netHistory = ref<number[]>([]);
 let timer: any = null;
 
-const smallOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { display: false } } };
-
-const cpuChart = computed(() => ({ labels: cpuHistory.value.map((_,i)=>''), datasets: [{ label: 'CPU', data: cpuHistory.value.slice(), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension: 0.3 }] }));
-const memChart = computed(() => ({ labels: memHistory.value.map((_,i)=>''), datasets: [{ label: 'Mem', data: memHistory.value.slice(), borderColor: '#2563EB', backgroundColor: 'rgba(37,99,235,0.08)', tension: 0.3 }] }));
-const netChart = computed(() => ({ labels: netHistory.value.map((_,i)=>''), datasets: [{ label: 'Net', data: netHistory.value.slice(), borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.08)', tension: 0.3 }] }));
+const cpuChart = computed(() => ({
+  labels: cpuHistory.value.map(() => ""),
+  datasets: [
+    {
+      label: "CPU",
+      data: cpuHistory.value.slice(),
+      borderColor: "hsl(var(--critical))",
+      backgroundColor: "hsla(var(--critical) / 0.08)",
+      tension: 0.3,
+    },
+  ],
+}));
+const memChart = computed(() => ({
+  labels: memHistory.value.map(() => ""),
+  datasets: [
+    {
+      label: "Mem",
+      data: memHistory.value.slice(),
+      borderColor: "hsl(var(--info))",
+      backgroundColor: "hsla(var(--info) / 0.08)",
+      tension: 0.3,
+    },
+  ],
+}));
+const netChart = computed(() => ({
+  labels: netHistory.value.map(() => ""),
+  datasets: [
+    {
+      label: "Net",
+      data: netHistory.value.slice(),
+      borderColor: "hsl(var(--success))",
+      backgroundColor: "hsla(var(--success) / 0.08)",
+      tension: 0.3,
+    },
+  ],
+}));
 
 const cpuOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  xAxis: { type: 'category', data: cpuChart.value.labels },
-  yAxis: { type: 'value', show: false },
+  tooltip: {
+    trigger: "axis",
+    backgroundColor: chartTheme.value.popover,
+    borderColor: chartTheme.value.border,
+    textStyle: { color: chartTheme.value.text },
+  },
+  xAxis: {
+    type: "category",
+    data: cpuChart.value.labels,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { show: false },
+  },
+  yAxis: { type: "value", show: false, splitLine: { show: false } },
   grid: { left: 0, right: 0, top: 10, bottom: 10 },
-  series: [{ name: cpuChart.value.datasets[0].label, type: 'line', data: cpuChart.value.datasets[0].data, smooth: true, lineStyle: { color: cpuChart.value.datasets[0].borderColor }, areaStyle: { color: cpuChart.value.datasets[0].backgroundColor } }]
+  series: [
+    {
+      name: cpuChart.value.datasets[0].label,
+      type: "line",
+      data: cpuChart.value.datasets[0].data,
+      smooth: true,
+      symbol: "none",
+      lineStyle: { color: cpuChart.value.datasets[0].borderColor, width: 2 },
+      areaStyle: { color: cpuChart.value.datasets[0].backgroundColor },
+    },
+  ],
 }));
 
 const memOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  xAxis: { type: 'category', data: memChart.value.labels },
-  yAxis: { type: 'value', show: false },
+  tooltip: {
+    trigger: "axis",
+    backgroundColor: chartTheme.value.popover,
+    borderColor: chartTheme.value.border,
+    textStyle: { color: chartTheme.value.text },
+  },
+  xAxis: {
+    type: "category",
+    data: memChart.value.labels,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { show: false },
+  },
+  yAxis: { type: "value", show: false, splitLine: { show: false } },
   grid: { left: 0, right: 0, top: 10, bottom: 10 },
-  series: [{ name: memChart.value.datasets[0].label, type: 'line', data: memChart.value.datasets[0].data, smooth: true, lineStyle: { color: memChart.value.datasets[0].borderColor }, areaStyle: { color: memChart.value.datasets[0].backgroundColor } }]
+  series: [
+    {
+      name: memChart.value.datasets[0].label,
+      type: "line",
+      data: memChart.value.datasets[0].data,
+      smooth: true,
+      symbol: "none",
+      lineStyle: { color: memChart.value.datasets[0].borderColor, width: 2 },
+      areaStyle: { color: memChart.value.datasets[0].backgroundColor },
+    },
+  ],
 }));
 
 const netOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  xAxis: { type: 'category', data: netChart.value.labels },
-  yAxis: { type: 'value', show: false },
+  tooltip: {
+    trigger: "axis",
+    backgroundColor: chartTheme.value.popover,
+    borderColor: chartTheme.value.border,
+    textStyle: { color: chartTheme.value.text },
+  },
+  xAxis: {
+    type: "category",
+    data: netChart.value.labels,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { show: false },
+  },
+  yAxis: { type: "value", show: false, splitLine: { show: false } },
   grid: { left: 0, right: 0, top: 10, bottom: 10 },
-  series: [{ name: netChart.value.datasets[0].label, type: 'line', data: netChart.value.datasets[0].data, smooth: true, lineStyle: { color: netChart.value.datasets[0].borderColor }, areaStyle: { color: netChart.value.datasets[0].backgroundColor } }]
+  series: [
+    {
+      name: netChart.value.datasets[0].label,
+      type: "line",
+      data: netChart.value.datasets[0].data,
+      smooth: true,
+      symbol: "none",
+      lineStyle: { color: netChart.value.datasets[0].borderColor, width: 2 },
+      areaStyle: { color: netChart.value.datasets[0].backgroundColor },
+    },
+  ],
 }));
 
-const latestNet = computed(() => netHistory.value.length ? netHistory.value[netHistory.value.length-1] : 0);
+const latestNet = computed(() =>
+  netHistory.value.length ? netHistory.value[netHistory.value.length - 1] : 0,
+);
+
+const statusTone = computed<"success" | "critical" | "neutral">(() => {
+  const s = server.value?.status;
+  if (s === "online") return "success";
+  if (s === "down") return "critical";
+  return "neutral";
+});
 
 onMounted(async () => {
   loading.value = true;
   const data = await fetchServer(id);
   server.value = data;
 
-  // init histories with values
   const initialCpu = server.value?.cpu ?? 0;
   const initialMem = server.value?.mem ?? 0;
   const initialNet = 0;
-  cpuHistory.value = Array.from({length:20}, ()=>initialCpu);
-  memHistory.value = Array.from({length:20}, ()=>initialMem);
-  netHistory.value = Array.from({length:20}, ()=>initialNet);
+  cpuHistory.value = Array.from({ length: 20 }, () => initialCpu);
+  memHistory.value = Array.from({ length: 20 }, () => initialMem);
+  netHistory.value = Array.from({ length: 20 }, () => initialNet);
 
-  // simulate updates every 2s
-  timer = setInterval(()=>{
+  timer = setInterval(() => {
     if (!server.value) return;
-    // update server metrics slightly
-    const cpu = Math.max(0, Math.min(100, (server.value.cpu ?? initialCpu) + Math.round((Math.random()-0.5)*8)));
-    const mem = Math.max(0, Math.min(100, (server.value.mem ?? initialMem) + Math.round((Math.random()-0.5)*6)));
-    const net = Math.max(0, Math.round(Math.random()*200));
+    const cpu = Math.max(
+      0,
+      Math.min(100, (server.value.cpu ?? initialCpu) + Math.round((Math.random() - 0.5) * 8)),
+    );
+    const mem = Math.max(
+      0,
+      Math.min(100, (server.value.mem ?? initialMem) + Math.round((Math.random() - 0.5) * 6)),
+    );
+    const net = Math.max(0, Math.round(Math.random() * 200));
     server.value.cpu = cpu;
     server.value.mem = mem;
 
@@ -152,7 +319,7 @@ onMounted(async () => {
   loading.value = false;
 });
 
-onBeforeUnmount(()=>{
+onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
 });
 </script>

@@ -1,18 +1,37 @@
 <template>
-  <div class="bg-card p-4 rounded border flex items-center justify-between">
-    <div>
-      <div class="font-bold text-lg">{{ server.name }} <span class="text-sm text-muted">• {{ server.status }}</span></div>
-      <div class="text-sm text-muted">CPU: {{ server.cpu }}% • Mem: {{ server.mem }}%</div>
+  <div
+    class="card card-body flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+  >
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-semibold text-base truncate">{{ server.name }}</span>
+        <Badge :tone="statusTone">{{ server.status }}</Badge>
+      </div>
+      <div class="text-sm text-muted-foreground mt-1">
+        CPU: {{ server.cpu }}% • Mem: {{ server.mem }}%
+      </div>
     </div>
-    <div class="flex items-center gap-3">
-      <router-link :to="`/server/${server.id}`" class="px-3 py-1 bg-primary text-primary-foreground rounded">View</router-link>
-    </div>
+    <router-link :to="`/server/${server.id}`">
+      <Button variant="outline" size="sm" class="self-start sm:self-auto">
+        View
+        <ChevronRight class="w-4 h-4" aria-hidden="true" />
+      </Button>
+    </router-link>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { defineProps } from 'vue';
-import type { Server } from '@/api/servers';
+import { computed } from "vue";
+import { ChevronRight } from "lucide-vue-next";
+import type { Server } from "@/api/servers";
+import Badge from "@/components/ui/Badge.vue";
+import Button from "@/components/ui/Button.vue";
+
 const props = defineProps<{ server: Server }>();
-const { server } = props;
+
+const statusTone = computed<"success" | "critical" | "neutral">(() => {
+  if (props.server.status === "online") return "success";
+  if (props.server.status === "down") return "critical";
+  return "neutral";
+});
 </script>
