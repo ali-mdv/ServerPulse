@@ -44,7 +44,9 @@ ServerPulse/
 │   │   ├── mongo/           # mongo client init
 │   │   └── errors/          # app error wrapper
 │   ├── .air.toml            # hot-reload config (local dev)
+│   │   └── .air.docker.toml # hot-reload config (Docker dev, writes to /out)
 │   ├── Dockerfile           # multi-stage Go build → distroless
+│   ├── Dockerfile.dev       # dev image: toolchain + deps, code mounted at runtime
 │   ├── go.mod
 │   └── go.sum
 │
@@ -59,15 +61,18 @@ ServerPulse/
 │   │   ├── types/           # shared TS types
 │   │   └── global.css       # Tailwind entry
 │   ├── Dockerfile           # multi-stage pnpm build → nginx
+│   ├── Dockerfile.dev       # dev image: pnpm + node_modules baked, code mounted at runtime
 │   ├── nginx.conf           # SPA fallback + /api reverse proxy to backend
 │   ├── netlify.toml         # Netlify deploy config
 │   ├── package.json
 │   ├── pnpm-lock.yaml
 │   ├── tsconfig.json
 │   ├── vite.config.ts
-│   └── vite.config.server.ts
+│   ├── vite.config.server.ts
+│   └── vite.config.docker.ts # vite config used only by the Docker dev container
 │
-├── docker-compose.yml       # mongo + backend + frontend orchestration
+├── docker-compose.yml        # mongo + backend + frontend orchestration
+├── docker-compose.dev.yml    # dev overlay: read-only code mounts + hot reload
 ├── .env / .env.example      # build-time and runtime env
 ├── .dockerignore            # root build-context exclusions
 ├── .gitignore
@@ -81,15 +86,30 @@ ServerPulse/
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env
-docker compose up --build
+cp .env.example .env            # set PM2_HOME, DOCKER_GID, HOST_UID/GID first
+docker compose up --build       # production: code changes require a rebuild
 ```
 
 | URL                              | Service                |
 |----------------------------------|------------------------|
-| http://localhost:8080            | Frontend (nginx → SPA) |
+| `http://localhost:${FRONTEND_PORT}` | Frontend (nginx → SPA) |
 | http://localhost:12000           | Backend (Gin)          |
 | mongodb://localhost:27017        | MongoDB                |
+
+Frontend `/api/*` is reverse-proxied by nginx to the backend container. The backend talks to Mongo by container name (`mongo`), not localhost.
+
+### Development (hot reload, read-only code mounts)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+Same URLs as production, but with live reload:
+
+- **Backend** — source bind-mounted read-only; `air` recompiles in-container and writes binaries to the `/out` volume. Code edits never rebuild the image.
+- **Frontend** — source bind-mounted read-only; `vite` runs with `vite.config.docker.ts` (native TS config loader — the normal config bundler writes temp files next to the config, which is impossible on a read-only mount) and `--configLoader native`.
+- The image is **only** rebuilt when dependencies change: `backend/go.mod` / `go.sum`, or `frontend/pnpm-lock.yaml`. A one-shot `perms-init` service chowns the backend volumes so `air` can write as `HOST_UID`.
+- The dev overlay pins frontend ports with `!override` (compose otherwise appends and double-binds the host port).
 
 Frontend `/api/*` is reverse-proxied by nginx to the backend container. The backend talks to Mongo by container name (`mongo`), not localhost.
 
@@ -118,7 +138,7 @@ The backend never shells out to the `pm2` binary. The distroless image has no sh
 
 Methods exposed to the rest of the backend match the previous interface (`List`, `Start`, `Stop`, `Restart`, `TailLogs`), so handlers/routes don't need to know the protocol changed.
 
-If PM2's daemon isn't running, the dial fails fast and the endpoint returns `503 pm2 daemon unreachable: <reason>` with the real cause logged at startup — not a generic 500.
+If PM2's daemon isn't running, the dial fails fast at startup and the cause is logged. Polling endpoints (`pm2/services`, `docker/containers`) respond with `HTTP 200` and `{"available": false, ...empty list}` instead of failing — the frontend hides the section when a provider isn't reachable. User-triggered actions (start/stop/restart/logs) still return `503 pm2 daemon unreachable: <reason>`.
 
 ---
 
@@ -169,13 +189,14 @@ All routes are mounted under `/api/v1`.
 
 | Route prefix       | Purpose                                  |
 |--------------------|------------------------------------------|
-| `/api/v1/auth`     | login, register, refresh                 |
+| `/api/v1/auth`     | login                                    |
 | `/api/v1/users`    | user CRUD                                |
-| `/api/v1/servers`  | monitored server list, fetch by id       |
 | `/api/v1/docker`   | list containers, start/stop/restart/logs |
 | `/api/v1/pm2`      | list processes, start/stop/restart/logs  |
 | `/api/v1/system`   | per-host CPU / memory / disk / network   |
 | `/api/v1/report`   | aggregated reports                       |
+
+> There is no `/servers` endpoint — the multi-server list/details pages render bundled sample data on the frontend (`frontend/src/api/servers.ts`).
 
 Authentication: JWT bearer in `Authorization: Bearer <token>` header on protected routes.
 
@@ -204,6 +225,7 @@ Authentication: JWT bearer in `Authorization: Bearer <token>` header on protecte
 ## Notes
 
 - `nginx.conf` in the frontend folder is **only** used by the Docker image — local `pnpm dev` does not use it.
-- `backend/.air.toml` is **only** used by local `air` runs.
+- `backend/.air.toml` is used by local `air` runs; `backend/.air.docker.toml` is used by the Docker dev overlay (same watcher, but the binary goes to `/out` because the source tree is mounted read-only).
+- `frontend/vite.config.docker.ts` is used only by the Docker dev container (read-only source); `pnpm dev` uses `vite.config.ts`.
 - MongoDB credentials live in `.env`; the bundled example uses `ali` / `123` for local convenience — change before exposing publicly.
-- The PM2 endpoint returns `503` (not `500`) when the daemon is unreachable — it's a runtime state, not a bug.
+- Polling endpoints that depend on host daemons return `200` with `available: false` instead of `503` so the browser console stays quiet; action endpoints still return real error codes.

@@ -9,6 +9,7 @@ ServerPulse/
 ├── backend/        Go service. Entry: backend/cmd/main.go. Config: backend/pkg/config (Viper).
 ├── frontend/       Vue SPA. Entry: frontend/src/main.ts. Routes: frontend/src/router/index.ts.
 ├── docker-compose.yml
+├── docker-compose.dev.yml
 ├── .env / .env.example
 ├── .gitignore  .dockerignore  .prettierrc
 ├── AGENTS.md (this file)
@@ -18,9 +19,10 @@ ServerPulse/
 Base config files (`.gitignore`, `.dockerignore`, `.env.example`, `.prettierrc`, `README.md`, `AGENTS.md`) live at the **root**. Do not duplicate them inside `backend/` or `frontend/`.
 
 Subproject files that must stay where they are (referenced by tools/builds):
-- `backend/.air.toml` — Go hot reload
-- `backend/Dockerfile` — `docker compose` builds from `./backend/Dockerfile`
-- `frontend/Dockerfile`, `frontend/nginx.conf` — `docker compose` and the image build
+- `backend/.air.toml`, `backend/.air.docker.toml` — Go hot reload (local / Docker dev)
+- `backend/Dockerfile`, `backend/Dockerfile.dev` — prod build and dev-overlay image (`Dockerfile.dev` bakes the toolchain + `go mod download` only; source is mounted at runtime)
+- `frontend/Dockerfile`, `frontend/Dockerfile.dev`, `frontend/nginx.conf` — `docker compose` and the image builds
+- `frontend/vite.config.ts`, `frontend/vite.config.docker.ts` — the docker variant is used only by the dev container (native TS config loader; the bundler can't run on a read-only mount)
 - `frontend/netlify.toml` — Netlify deploy
 - `frontend/.npmrc` — pnpm config
 
@@ -30,7 +32,8 @@ Subproject files that must stay where they are (referenced by tools/builds):
 - **Entry:** `backend/cmd/main.go`. Loads config, initialises Mongo, then `routes.Setup()`.
 - **HTTP routing:** gin. Each domain gets its own `internal/routes/v1/<name>.go` and is wired in `internal/routes/v1/routes.go` (or `router.go`). Keep new domains in this layered shape: `handlers` → `services` → `repository`.
 - **DTOs vs models:** `internal/dtos` is for request/response shapes; `internal/models` is the persisted entity. Don't return models directly from handlers — wrap in DTOs.
-- **Errors:** `pkg/errors` exposes `AppError` with `New()` + `Wrap()`. Use it; don't `errors.New` in handlers.
+- **Errors:** `pkg/errors` exposes `AppError` with `New()` + `Wrap()` (+ `IsUnavailable()`). Use it; don't `errors.New` in handlers.
+- **Poll-endpoint degradation:** list endpoints polled by the dashboard (`pm2/services`, `docker/containers`) must respond `200 {"…": [], "available": false}` when their host daemon is unreachable (`errors.IsUnavailable` / `isDockerUnavailable` in the handler) — never a 503 there, it would spam the browser console every interval. Only user-initiated actions (start/stop/restart/logs) surface real error codes.
 - **Config:** `pkg/config.Load()` reads env via Viper. Don't read `os.Getenv` directly elsewhere.
 - **Auth:** JWT (`pkg/...`). Protected routes go through the auth middleware in `internal/middlewares/auth.go`.
 - **System metrics:** `gopsutil` is the source. Don't shell out to `top`/`free`/etc.
@@ -92,7 +95,7 @@ The backend container must reach two host-side daemons. Both are configured via 
 - `HOST_UID`, `HOST_GID` — uid/gid of the user that owns PM2 on the host (`id -u` / `id -g`). The backend container runs as this user so it can read the PM2 socket.
 - `DOCKER_GID` — gid of the `docker` group on the host (`stat -c %g /var/run/docker.sock`). Required for the backend to reach the docker socket.
 
-If these are wrong or unset, `/pm2/services` and `/docker/containers` will return 503/500 — but `pkg/config` only complains about *missing* `DB_*` / `PORT`, not about `PM2_SOCKET_PATH`, so check the container's startup log for `pm2 service: dial …` to see the real cause.
+If these are wrong or unset, `/pm2/services` and `/docker/containers` return `200 {"available": false}` with empty lists (the dashboard hides the sections), but `pkg/config` only complains about *missing* `DB_*` / `PORT`, not about `PM2_SOCKET_PATH`, so check the container's startup log for `pm2 service: dial …` to see the real cause. User-initiated actions return the unmasked 503.
 
 ## Conventions
 
@@ -102,6 +105,8 @@ If these are wrong or unset, `/pm2/services` and `/docker/containers` will retur
 - **Vue components:** `<script setup lang="ts">`. Props via `defineProps`, emits via `defineEmits`, no Options API.
 - **Naming:** backend uses snake_case filenames (`user_repository.go`), exported symbols PascalCase. Frontend uses PascalCase components, camelCase functions.
 - **Imports:** prefer `@/` alias in frontend over deep relative paths.
+- **Sample data:** `api/servers.ts` serves bundled sample data without network calls — there is no `/servers` backend endpoint; adding one means wiring it through `@/api/*` and removing the sample fallback.
+- **Provider availability:** stores expose an `available` flag next to the payload (from `pm2/services` / `docker/containers`); components hide a provider's section when it's `false` instead of rendering placeholders or toasting every interval.
 
 ## What NOT to do
 
@@ -115,10 +120,11 @@ If these are wrong or unset, `/pm2/services` and `/docker/containers` will retur
 
 ## Docker
 
-- Compose file: `docker-compose.yml` at root.
+- Compose file: `docker-compose.yml` at root; dev overlay `docker-compose.dev.yml` is merged on top for hot reload.
 - Builds use `context: .` with relative dockerfile paths (`./backend/Dockerfile`, `./frontend/Dockerfile`). The root `.dockerignore` is honored for both.
 - Backend image: multi-stage Go → distroless static, nonroot user **overridden** at runtime by `user:` in compose so it can read the host's PM2 socket.
 - Frontend image: multi-stage pnpm build → nginx, with `/api` reverse-proxied to the `backend` service.
+- Dev overlay (`-f docker-compose.dev.yml`): code bind-mounted read-only, `air`/vite hot reload, `perms-init` one-shot chowns the shared volumes for `HOST_UID`, and frontend `ports:` uses `!override` because compose merges port lists by append (double-binding the same host port otherwise).
 - Mongo data persists in the named volume `mongo_data`.
 - Bind mounts that cross the host/container boundary:
   - `/var/run/docker.sock:/var/run/docker.sock` (host docker daemon)
