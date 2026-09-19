@@ -43,10 +43,11 @@ func NewAgentService(serverRepo repository.ServerRepository, state StateService,
 func (s *agentService) IngestPush(ctx context.Context, server models.Server, push dtos.AgentPushDTO) error {
 	serverID := server.HexID()
 
-	// 1. Refresh server identity fields. We trust the agent on name/host/
-	//    port/description but keep the existing token/status untouched.
+	// 1. Refresh server identity fields. We trust the agent on name/
+	//    description and on any non-empty host/port it reports, but keep
+	//    the existing token/status untouched.
 	now := time.Now().UTC()
-	if server.Name != push.Name || server.Host != push.Host || server.Port != push.Port || server.Description != push.Description {
+	if s.identityChanged(server, push) {
 		if err := s.touchIdentity(ctx, server.ID, push); err != nil {
 			log.Printf("agent: identity update failed for %s: %v", serverID, err)
 		}
@@ -102,19 +103,44 @@ func (s *agentService) insertHistory(ctx context.Context, snapshots []models.Ser
 	return s.history.InsertHistoryBatch(ctx, snapshots)
 }
 
+// identityChanged reports whether the push carries a different identity
+// from the stored server. Empty host/port from the push are treated as
+// "no opinion" and do not trigger an update.
+func (s *agentService) identityChanged(server models.Server, push dtos.AgentPushDTO) bool {
+	if server.Name != push.Name {
+		return true
+	}
+	if server.Description != push.Description {
+		return true
+	}
+	if push.Host != "" && server.Host != push.Host {
+		return true
+	}
+	if push.Port > 0 && server.Port != push.Port {
+		return true
+	}
+	return false
+}
+
 // touchIdentity updates the mutable CRUD fields the agent sent, without
-// overwriting LastSeen / Status / AgentToken / CreatedAt.
+// overwriting LastSeen / Status / AgentToken / CreatedAt. Empty host/port
+// from the push are ignored so the agent can omit details it does not
+// know without clearing previously supplied values.
 func (s *agentService) touchIdentity(ctx context.Context, id bson.ObjectID, push dtos.AgentPushDTO) error {
-	update := bson.D{{
-		Key: "$set",
-		Value: bson.D{
-			{Key: "name", Value: push.Name},
-			{Key: "host", Value: push.Host},
-			{Key: "port", Value: push.Port},
-			{Key: "description", Value: push.Description},
-			{Key: "updatedAt", Value: time.Now().UTC()},
-		},
-	}}
+	set := bson.D{
+		{Key: "name", Value: push.Name},
+		{Key: "updatedAt", Value: time.Now().UTC()},
+	}
+	if push.Host != "" {
+		set = append(set, bson.E{Key: "host", Value: push.Host})
+	}
+	if push.Port > 0 {
+		set = append(set, bson.E{Key: "port", Value: push.Port})
+	}
+	// Allow description to be intentionally cleared.
+	set = append(set, bson.E{Key: "description", Value: push.Description})
+
+	update := bson.D{{Key: "$set", Value: set}}
 	if _, err := s.serverRepo.UpdateByID(ctx, id, update); err != nil {
 		return err
 	}

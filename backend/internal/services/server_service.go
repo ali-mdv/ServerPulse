@@ -28,6 +28,7 @@ type ServerService interface {
 	GetByID(ctx context.Context, id bson.ObjectID) (*models.Server, error)
 	Update(ctx context.Context, id bson.ObjectID, dto dtos.UpdateServerDTO) (*models.Server, error)
 	Delete(ctx context.Context, id bson.ObjectID) error
+	GenerateAgentToken(ctx context.Context, id bson.ObjectID) (*models.Server, string, error)
 	ResolveByAgentToken(ctx context.Context, token string) (*models.Server, error)
 	EnsureLocalServer(ctx context.Context) (*models.Server, error)
 }
@@ -41,19 +42,15 @@ func NewServerService(dbName string) ServerService {
 	return &serverService{repo: repository.NewServerRepository(db)}
 }
 
-// Create registers a new server and returns it with a freshly minted
-// AgentToken. The token is the only secret returned to the caller;
-// everything else (heartbeat, status, lastSeen) is managed later.
+// Create registers a new server (agent) from its display name and an
+// optional description. The API key is intentionally left empty; it is
+// generated later via GenerateAgentToken so the creation step and the
+// credential step can be audited separately.
 func (s *serverService) Create(ctx context.Context, dto dtos.CreateServerDTO) (*models.Server, error) {
 	if existing, err := s.repo.FindByName(ctx, dto.Name); err != nil {
 		return nil, err
 	} else if existing != nil {
 		return nil, ErrServerNameTaken
-	}
-
-	token, err := generateAgentToken()
-	if err != nil {
-		return nil, fmt.Errorf("server: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -63,7 +60,6 @@ func (s *serverService) Create(ctx context.Context, dto dtos.CreateServerDTO) (*
 		Port:        dto.Port,
 		Description: dto.Description,
 		Status:      models.ServerStatusUnknown,
-		AgentToken:  token,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -125,6 +121,40 @@ func (s *serverService) Delete(ctx context.Context, id bson.ObjectID) error {
 		return err
 	}
 	return nil
+}
+
+// GenerateAgentToken mints a new opaque API key for the server and stores
+// it on the record. The token is returned exactly once; subsequent calls
+// rotate the key and return the new value, invalidating any previous key.
+func (s *serverService) GenerateAgentToken(ctx context.Context, id bson.ObjectID) (*models.Server, string, error) {
+	srv, err := s.GetByID(ctx, id)
+	if err != nil {
+		return nil, "", err
+	}
+	if srv == nil {
+		return nil, "", ErrServerNotFound
+	}
+
+	token, err := generateAgentToken()
+	if err != nil {
+		return nil, "", fmt.Errorf("server: %w", err)
+	}
+
+	update := bson.D{{
+		Key: "$set",
+		Value: bson.D{
+			{Key: "agentToken", Value: token},
+			{Key: "updatedAt", Value: time.Now().UTC()},
+		},
+	}}
+	updated, err := s.repo.UpdateByID(ctx, id, update)
+	if err != nil {
+		return nil, "", err
+	}
+	if updated == nil {
+		return nil, "", ErrServerNotFound
+	}
+	return updated, token, nil
 }
 
 func (s *serverService) ResolveByAgentToken(ctx context.Context, token string) (*models.Server, error) {

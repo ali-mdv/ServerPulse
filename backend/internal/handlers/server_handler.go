@@ -65,8 +65,9 @@ func (h *ServerHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"server": dto})
 }
 
-// Create registers a new server and returns the freshly minted token
-// exactly once. Subsequent reads (Get/List) never expose the token.
+// Create registers a new server (agent) from name + optional description.
+// The API key is not generated here; call POST /servers/:serverId/api-key
+// after creation to mint and reveal the key.
 func (h *ServerHandler) Create(c *gin.Context) {
 	var body dtos.CreateServerDTO
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -80,10 +81,28 @@ func (h *ServerHandler) Create(c *gin.Context) {
 		return
 	}
 
-	dto := dtos.ToServerDTO(*srv, nil, nil)
-	c.JSON(http.StatusCreated, gin.H{
-		"server":     dto,
-		"agentToken": srv.AgentToken,
+	c.JSON(http.StatusCreated, gin.H{"server": dtos.ToServerDTO(*srv, nil, nil)})
+}
+
+// GenerateAgentToken mints or rotates the agent API key for a server. The
+// key is returned exactly once in the response as `apiKey`; it is never
+// exposed again.
+func (h *ServerHandler) GenerateAgentToken(c *gin.Context) {
+	id, err := bson.ObjectIDFromHex(c.Param("serverId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid server id"})
+		return
+	}
+
+	srv, token, err := h.serverSvc.GenerateAgentToken(c.Request.Context(), id)
+	if err != nil {
+		respondServerError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"server": dtos.ToServerDTO(*srv, nil, nil),
+		"apiKey": token,
 	})
 }
 

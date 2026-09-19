@@ -24,8 +24,8 @@ type AgentProviderDTO struct {
 // token.
 type AgentPushDTO struct {
 	Name        string                      `binding:"required,min=1,max=64" json:"name"`
-	Host        string                      `binding:"required,min=1,max=255" json:"host"`
-	Port        int                         `binding:"required,min=1,max=65535" json:"port"`
+	Host        string                      `binding:"omitempty,max=255" json:"host"`
+	Port        int                         `binding:"omitempty,min=0,max=65535" json:"port"`
 	Description string                      `binding:"omitempty,max=255" json:"description"`
 	Usage       models.SystemUsage          `binding:"required" json:"usage"`
 	Providers   map[string]AgentProviderDTO `binding:"omitempty" json:"providers"`

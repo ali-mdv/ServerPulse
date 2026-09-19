@@ -17,6 +17,7 @@ func RegisterServerRoutes(r *gin.RouterGroup, s *Services) {
 		api.GET("", handler.List)
 		api.POST("", handler.Create)
 		api.GET("/:serverId", handler.Get)
+		api.POST("/:serverId/api-key", handler.GenerateAgentToken)
 		api.PUT("/:serverId", handler.Update)
 		api.DELETE("/:serverId", handler.Delete)
 	}

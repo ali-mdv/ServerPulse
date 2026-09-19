@@ -9,12 +9,14 @@ import (
 )
 
 // CreateServerDTO is the request body for POST /servers. The backend
-// generates the AgentToken and assigns the ObjectID, so the caller only
-// supplies identity + connection details.
+// assigns the ObjectID; the caller only supplies the display name and an
+// optional description. Host/port are discovered later from the agent's
+// first push, and the API key is generated in a separate step after
+// creation.
 type CreateServerDTO struct {
 	Name        string `binding:"required,min=1,max=64" json:"name"`
-	Host        string `binding:"required,min=1,max=255" json:"host"`
-	Port        int    `binding:"required,min=1,max=65535" json:"port"`
+	Host        string `binding:"omitempty,max=255" json:"host"`
+	Port        int    `binding:"omitempty,min=0,max=65535" json:"port"`
 	Description string `binding:"omitempty,max=255" json:"description"`
 }
 
