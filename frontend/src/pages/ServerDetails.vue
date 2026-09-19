@@ -37,15 +37,36 @@
     <div v-else class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card class="h-44">
-          <h3 class="font-semibold mb-2">CPU Usage</h3>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-semibold">CPU Usage</h3>
+            <router-link to="/system/cpu">
+              <Button variant="outline" size="sm" aria-label="CPU history">
+                <LineChart class="w-4 h-4" aria-hidden="true" />
+              </Button>
+            </router-link>
+          </div>
           <v-chart :option="cpuOption" style="height: 120px; width: 100%" />
         </Card>
         <Card class="h-44">
-          <h3 class="font-semibold mb-2">Memory Usage</h3>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-semibold">Memory Usage</h3>
+            <router-link to="/system/memory">
+              <Button variant="outline" size="sm" aria-label="Memory history">
+                <LineChart class="w-4 h-4" aria-hidden="true" />
+              </Button>
+            </router-link>
+          </div>
           <v-chart :option="memOption" style="height: 120px; width: 100%" />
         </Card>
         <Card class="h-44">
-          <h3 class="font-semibold mb-2">Network Traffic (KB/s)</h3>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-semibold">Network Traffic (KB/s)</h3>
+            <router-link to="/system/network">
+              <Button variant="outline" size="sm" aria-label="Network history">
+                <LineChart class="w-4 h-4" aria-hidden="true" />
+              </Button>
+            </router-link>
+          </div>
           <v-chart :option="netOption" style="height: 120px; width: 100%" />
         </Card>
       </div>
@@ -119,7 +140,7 @@
 <script lang="ts" setup>
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useRoute } from "vue-router";
-import { ChevronLeft } from "lucide-vue-next";
+import { ChevronLeft, LineChart } from "lucide-vue-next";
 import { fetchServer } from "@/api/servers";
 import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
 import Card from "@/components/Card.vue";

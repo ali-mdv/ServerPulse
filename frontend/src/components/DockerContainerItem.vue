@@ -8,8 +8,16 @@
         <Badge :tone="stateTone">{{ props.container.state }}</Badge>
       </div>
       <div class="text-xs text-muted-foreground mt-1 break-words">
-        Status: {{ props.container.upTime }} • Image: {{ props.container.image }} •
-        Port:{{ props.container.port }}
+        <template v-if="props.container.upTime">Status: {{ props.container.upTime }}</template>
+        <template v-if="props.container.image">
+          <template v-if="props.container.upTime"> • </template>Image: {{ props.container.image }}
+        </template>
+        <template v-if="props.container.port">
+          <template v-if="props.container.upTime || props.container.image"> • </template>Port: {{ props.container.port }}
+        </template>
+        <template v-if="!props.container.upTime && !props.container.image && !props.container.port">
+          State snapshot — live details unavailable
+        </template>
       </div>
       <div class="flex gap-2 flex-wrap mt-3">
         <Button
@@ -68,6 +76,14 @@
           </template>
           Logs
         </Button>
+        <router-link :to="`/service/docker/${props.container.id}`">
+          <Button variant="outline" size="sm">
+            <template #icon-left>
+              <LineChart class="w-3.5 h-3.5" aria-hidden="true" />
+            </template>
+            History
+          </Button>
+        </router-link>
       </div>
     </div>
     <div
@@ -92,7 +108,7 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue";
 import { useToast } from "primevue/usetoast";
-import { Play, Square, RotateCw, ScrollText } from "lucide-vue-next";
+import { Play, Square, RotateCw, ScrollText, LineChart } from "lucide-vue-next";
 import LogsModal from "@/components/LogsModal.vue";
 import { DockerContainer, DockerContainerState, ServiceAction } from "@/types";
 import { useSystemStore } from "@/stores/system";

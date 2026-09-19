@@ -25,7 +25,15 @@
 
     <!-- CPU -->
     <Card>
-      <h3 class="font-semibold mb-3">CPU Usage (Total)</h3>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">CPU Usage (Total)</h3>
+        <router-link to="/system/cpu">
+          <Button variant="outline" size="sm">
+            <LineChart class="w-4 h-4" aria-hidden="true" />
+            History
+          </Button>
+        </router-link>
+      </div>
       <div v-if="usageLoading" class="space-y-2">
         <Skeleton height="1rem" width="60%" />
         <Skeleton height="240px" />
@@ -36,7 +44,15 @@
     <!-- MEMORY & DISK -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <Card>
-        <h3 class="font-semibold mb-3">Memory Usage</h3>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold">Memory Usage</h3>
+          <router-link to="/system/memory">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
         <div v-if="usageLoading" class="space-y-2">
           <Skeleton height="1rem" width="60%" />
           <Skeleton height="220px" />
@@ -45,7 +61,15 @@
       </Card>
 
       <Card>
-        <h3 class="font-semibold mb-3">Disk Usage</h3>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold">Disk Usage</h3>
+          <router-link to="/system/disk">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
         <div v-if="usageLoading" class="space-y-2">
           <Skeleton height="1rem" width="60%" />
           <Skeleton height="220px" />
@@ -57,13 +81,29 @@
     <!-- Network Charts -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <Card>
-        <h3 class="font-semibold mb-2">Network Sent (KB/s)</h3>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold">Network Sent (KB/s)</h3>
+          <router-link to="/system/network">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
         <Skeleton v-if="usageLoading" height="120px" />
         <v-chart v-else :option="netSendOption" :autoresize="true" class="h-32 w-full" />
       </Card>
 
       <Card>
-        <h3 class="font-semibold mb-2">Network Received (KB/s)</h3>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold">Network Received (KB/s)</h3>
+          <router-link to="/system/network">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
         <Skeleton v-if="usageLoading" height="120px" />
         <v-chart v-else :option="netReceivedOption" :autoresize="true" class="h-32 w-full" />
       </Card>
@@ -111,16 +151,22 @@
 <script setup lang="ts">
 import { reactive, computed, onMounted, ref, watchEffect } from "vue";
 import { useToast } from "primevue/usetoast";
-import { Server, Activity, AlertTriangle, CircleSlash } from "lucide-vue-next";
+import { Server, Activity, AlertTriangle, CircleSlash, LineChart } from "lucide-vue-next";
 import Card from "@/components/Card.vue";
 import { useSystemStore } from "@/stores/system";
 import { UsageInfo, NetIOInfo, PM2Service, DockerContainer } from "@/types";
 import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
 import Skeleton from "@/components/ui/Skeleton.vue";
 import Badge from "@/components/ui/Badge.vue";
+import Button from "@/components/ui/Button.vue";
 import { useChartTheme } from "@/composables";
 import { fetchServers } from "@/api/servers";
+import { HistoryRange } from "@/api/history";
 import { withAlpha } from "@/lib/chart-theme";
+import {
+  snapshotsToPM2Services,
+  snapshotsToDockerContainers,
+} from "@/lib/service-snapshot";
 
 const toast = useToast();
 const systemStore = useSystemStore();
@@ -172,6 +218,15 @@ const cpuOption = ref({
     textStyle: { color: chartTheme.value.text },
     extraCssText:
       "box-shadow: 0 4px 12px rgba(0,0,0,0.25); border-radius: 6px;",
+    formatter: (params: { axisValue: string; data: number }[]) => {
+      const p = params[0];
+      if (!p) return "";
+      const value =
+        typeof p.data === "number" && !Number.isNaN(p.data)
+          ? `${p.data.toFixed(1)}%`
+          : "—";
+      return `${p.axisValue}<br/>CPU: <strong>${value}</strong>`;
+    },
   },
   grid: { left: 40, right: 16, top: 16, bottom: 28 },
   xAxis: {
@@ -399,8 +454,14 @@ function updateDiskUsageChart(diskUsage: UsageInfo) {
 
 const netSent = ref<number[]>(Array(20).fill(0));
 const netReceived = ref<number[]>(Array(20).fill(0));
+const netSentLabels = ref<string[]>(Array(20).fill(""));
+const netReceivedLabels = ref<string[]>(Array(20).fill(""));
 
-function createNetOption(source: number[]) {
+function createNetOption(
+  source: number[],
+  labels: string[],
+  label: string,
+) {
   return {
     animation: false,
     tooltip: {
@@ -408,12 +469,28 @@ function createNetOption(source: number[]) {
       backgroundColor: chartTheme.value.popover,
       borderColor: chartTheme.value.border,
       textStyle: { color: chartTheme.value.text },
+      formatter: (params: { axisValue: string; data: number }[]) => {
+        const p = params[0];
+        if (!p) return "";
+        const value =
+          typeof p.data === "number" && !Number.isNaN(p.data)
+            ? `${p.data} KB/s`
+            : "—";
+        return `${p.axisValue}<br/>${label}: <strong>${value}</strong>`;
+      },
     },
     xAxis: {
       type: "category",
-      axisLine: { show: false },
+      data: labels,
+      axisLine: { lineStyle: { color: chartTheme.value.border } },
       axisTick: { show: false },
-      axisLabel: { show: false },
+      axisLabel: {
+        show: true,
+        color: chartTheme.value.textMuted,
+        fontSize: 10,
+        interval: 4,
+        formatter: (v: string) => v,
+      },
     },
     yAxis: {
       type: "value",
@@ -447,8 +524,12 @@ function createNetOption(source: number[]) {
   };
 }
 
-const netSendOption = ref(createNetOption(netSent.value));
-const netReceivedOption = ref(createNetOption(netReceived.value));
+const netSendOption = ref(
+  createNetOption(netSent.value, netSentLabels.value, "Sent"),
+);
+const netReceivedOption = ref(
+  createNetOption(netReceived.value, netReceivedLabels.value, "Received"),
+);
 
 watchEffect(() => {
   const theme = chartTheme.value;
@@ -456,6 +537,9 @@ watchEffect(() => {
   sendOpt.tooltip.backgroundColor = theme.popover;
   sendOpt.tooltip.borderColor = theme.border;
   sendOpt.tooltip.textStyle.color = theme.text;
+  sendOpt.xAxis.data = netSentLabels.value;
+  sendOpt.xAxis.axisLine.lineStyle.color = theme.border;
+  sendOpt.xAxis.axisLabel.color = theme.textMuted;
   sendOpt.series[0].data = netSent.value;
   sendOpt.series[0].lineStyle.color = theme.success;
   sendOpt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.success, 0.33);
@@ -468,6 +552,9 @@ watchEffect(() => {
   recvOpt.tooltip.backgroundColor = theme.popover;
   recvOpt.tooltip.borderColor = theme.border;
   recvOpt.tooltip.textStyle.color = theme.text;
+  recvOpt.xAxis.data = netReceivedLabels.value;
+  recvOpt.xAxis.axisLine.lineStyle.color = theme.border;
+  recvOpt.xAxis.axisLabel.color = theme.textMuted;
   recvOpt.series[0].data = netReceived.value;
   recvOpt.series[0].lineStyle.color = theme.success;
   recvOpt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.success, 0.33);
@@ -477,12 +564,24 @@ watchEffect(() => {
 function updateNetwork(io: NetIOInfo) {
   const sent = Math.round(io.sent / 1024);
   const received = Math.round(io.received / 1024);
+  const time = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-  if (netSent.value.length >= 20) netSent.value.shift();
-  if (netReceived.value.length >= 20) netReceived.value.shift();
+  if (netSent.value.length >= 20) {
+    netSent.value.shift();
+    netSentLabels.value.shift();
+  }
+  if (netReceived.value.length >= 20) {
+    netReceived.value.shift();
+    netReceivedLabels.value.shift();
+  }
 
   netSent.value.push(sent);
+  netSentLabels.value.push(time);
   netReceived.value.push(received);
+  netReceivedLabels.value.push(time);
 }
 
 const pm2Services = ref<PM2Service[]>([]);
@@ -499,7 +598,7 @@ const highUsageServers = computed(() =>
 
 async function loadSystemUsage() {
   try {
-    const data = await systemStore.fetchSystemUsage();
+    const data = await systemStore.fetchSystemState();
     updateCpu(data.cpuUsage);
     updateMemory(data.memUsage);
     updateNetwork(data.netIO);
@@ -512,26 +611,17 @@ async function loadSystemUsage() {
   }
 }
 
-async function loadPm2Services() {
+async function loadServicesState() {
   try {
-    const { services, available } = await systemStore.fetchPM2Services();
-    pm2Services.value = services;
-    pm2Available.value = available;
+    const { pm2, docker } = await systemStore.fetchServicesState();
+    pm2Services.value = snapshotsToPM2Services(pm2.services ?? []);
+    pm2Available.value = pm2.available;
+    dockerContainers.value = snapshotsToDockerContainers(docker.services ?? []);
+    dockerAvailable.value = docker.available;
   } catch (err: any) {
     toast.add({ severity: "error", summary: "Error", detail: err.message });
   } finally {
     servicesLoading.value = false;
-  }
-}
-
-async function loadDockerContainers() {
-  try {
-    const { containers, available } =
-      await systemStore.fetchDockerContainers();
-    dockerContainers.value = containers;
-    dockerAvailable.value = available;
-  } catch (err: any) {
-    toast.add({ severity: "error", summary: "Error", detail: err.message });
   }
 }
 
@@ -545,14 +635,54 @@ async function loadServers() {
   }
 }
 
-onMounted(() => {
+async function loadChartHistory() {
+  try {
+    const [cpuPoints, sentPoints, recvPoints] = await Promise.all([
+      systemStore.fetchServiceHistory("system", "cpu", "1h"),
+      systemStore.fetchServiceHistory("system", "network_sent", "1h"),
+      systemStore.fetchServiceHistory("system", "network_recv", "1h"),
+    ]);
+
+    const recentCpu = cpuPoints.slice(-12);
+    cpuData.labels = recentCpu.map((p) =>
+      new Date(p.ts).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+    );
+    cpuData.values = recentCpu.map((p) => Math.round(p.cpu ?? 0));
+
+    const recentSent = sentPoints.slice(-20);
+    const recentRecv = recvPoints.slice(-20);
+    netSent.value = recentSent.map((p) => Math.round((p.netSent ?? 0) / 1024));
+    netSentLabels.value = recentSent.map((p) =>
+      new Date(p.ts).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    );
+    netReceived.value = recentRecv.map((p) =>
+      Math.round((p.netRecv ?? 0) / 1024),
+    );
+    netReceivedLabels.value = recentRecv.map((p) =>
+      new Date(p.ts).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    );
+  } catch (err: any) {
+    toast.add({ severity: "error", summary: "Error", detail: err.message });
+  }
+}
+
+onMounted(async () => {
   loadServers();
+  await loadChartHistory();
   loadSystemUsage();
-  loadPm2Services();
-  loadDockerContainers();
+  loadServicesState();
   setInterval(loadServers, systemStore.intervalMS * 6);
   setInterval(loadSystemUsage, systemStore.intervalMS);
-  setInterval(loadPm2Services, systemStore.intervalMS);
-  setInterval(loadDockerContainers, systemStore.intervalMS);
+  setInterval(loadServicesState, systemStore.intervalMS);
 });
 </script>

@@ -11,7 +11,18 @@ import {
   DockerContainer,
   GetDockerContainersList,
   GetLogsApi,
+  HistoryProvider,
+  ServiceSnapshot,
+  ProviderState,
 } from "@/types/system";
+import {
+  fetchServiceHistory as apiFetchServiceHistory,
+  HistoryRange,
+} from "@/api/history";
+import {
+  fetchServicesState as apiFetchServicesState,
+  fetchSystemState as apiFetchSystemState,
+} from "@/api/state";
 
 const SETTINGS_KEY = "settings";
 
@@ -62,6 +73,39 @@ export const useSystemStore = defineStore("system", () => {
         }
       }
       throw new Error("Failed to fetch system usage info");
+    }
+  }
+
+  async function fetchSystemState(): Promise<SystemUsage> {
+    try {
+      const response = await apiFetchSystemState();
+      if (!response.systemUsage) {
+        throw new Error("No system state recorded yet");
+      }
+      return response.systemUsage;
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
+          throw new Error("Access denied");
+        }
+      }
+      throw new Error("Failed to fetch system state");
+    }
+  }
+
+  async function fetchServicesState(): Promise<{
+    pm2: ProviderState;
+    docker: ProviderState;
+  }> {
+    try {
+      return await apiFetchServicesState();
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response.status === axios.HttpStatusCode.Unauthorized) {
+          throw new Error("Access denied");
+        }
+      }
+      throw new Error("Failed to fetch services state");
     }
   }
 
@@ -257,8 +301,16 @@ export const useSystemStore = defineStore("system", () => {
   return {
     intervalMS,
     fetchSystemUsage,
+    fetchSystemState,
     fetchPM2Services,
     fetchDockerContainers,
+    fetchServicesState,
+    fetchServiceHistory: (
+      provider: HistoryProvider,
+      serviceId: string,
+      range: HistoryRange,
+    ): Promise<ServiceSnapshot[]> =>
+      apiFetchServiceHistory(provider, serviceId, range),
     startDockerContainer,
     stopDockerContainer,
     restartDockerContainer,

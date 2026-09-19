@@ -67,6 +67,14 @@
           </template>
           Logs
         </Button>
+        <router-link :to="`/service/pm2/${props.service.pm_id}`">
+          <Button variant="outline" size="sm">
+            <template #icon-left>
+              <LineChart class="w-3.5 h-3.5" aria-hidden="true" />
+            </template>
+            History
+          </Button>
+        </router-link>
       </div>
     </div>
     <div class="text-right text-sm shrink-0">
@@ -87,7 +95,7 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue";
 import { useToast } from "primevue/usetoast";
-import { Play, Square, RotateCw, ScrollText } from "lucide-vue-next";
+import { Play, Square, RotateCw, ScrollText, LineChart } from "lucide-vue-next";
 import LogsModal from "@/components/LogsModal.vue";
 import { useSystemStore } from "@/stores/system";
 import { PM2Service, PM2ServiceState, ServiceAction } from "@/types";

@@ -9,8 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Setup() *gin.Engine {
-	cfg := config.Load()
+func Setup(cfg *config.Config, s *v1.Services) *gin.Engine {
 	srv := gin.Default()
 
 	corsCfg := cors.Config{
@@ -34,7 +33,7 @@ func Setup() *gin.Engine {
 	r := srv.Group("/api")
 
 	{
-		v1.RegisterV1Routes(r, cfg)
+		v1.RegisterV1Routes(r, s)
 	}
 	return srv
 }

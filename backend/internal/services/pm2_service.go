@@ -20,8 +20,8 @@ type PM2Service interface {
 }
 
 type pm2Service struct {
-	client   *pm2pkg.Client
-	dialErr  error // surfaced to callers when the client never came up
+	client  *pm2pkg.Client
+	dialErr error // surfaced to callers when the client never came up
 }
 
 // NewPM2Service connects to the host PM2 daemon via its unix socket.

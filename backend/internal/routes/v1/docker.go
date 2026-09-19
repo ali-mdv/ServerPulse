@@ -8,8 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterDockerRoutes(r *gin.RouterGroup) {
-	service := services.NewDockerService()
+func RegisterDockerRoutes(r *gin.RouterGroup, service services.DockerService) {
 	handler := handlers.NewDockerHandler(service)
 
 	api := r.Group("/docker")

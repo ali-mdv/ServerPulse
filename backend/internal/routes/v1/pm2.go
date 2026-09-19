@@ -4,13 +4,11 @@ import (
 	"server-monitoring/internal/handlers"
 	"server-monitoring/internal/middlewares"
 	"server-monitoring/internal/services"
-	"server-monitoring/pkg/config"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterPM2Routes(r *gin.RouterGroup, cfg *config.Config) {
-	service := services.NewPM2Service(cfg.PM2SocketPath)
+func RegisterPM2Routes(r *gin.RouterGroup, service services.PM2Service) {
 	handler := handlers.NewPM2Handler(service)
 
 	api := r.Group("/pm2")
