@@ -20,6 +20,7 @@ type historyScheduler struct {
 	history  HistoryService
 	state    StateService
 	interval time.Duration
+	serverID string
 }
 
 func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemService, history HistoryService, state StateService, interval time.Duration) HistoryScheduler {
@@ -30,6 +31,7 @@ func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemServ
 		history:  history,
 		state:    state,
 		interval: interval,
+		serverID: LocalServerID,
 	}
 }
 
@@ -62,46 +64,47 @@ func (s *historyScheduler) tick(ctx context.Context) {
 
 	if procs, err := s.pm2.List(); err != nil {
 		log.Printf("history: pm2 list failed: %v", err)
-		_ = s.history.RecordProviderUnavailable(tickCtx, "pm2")
-		_ = s.state.RecordProviderState(tickCtx, "pm2", false, nil)
+		_ = s.history.RecordProviderUnavailable(tickCtx, s.serverID, "pm2")
+		_ = s.state.RecordProviderState(tickCtx, s.serverID, "pm2", false, nil)
 	} else {
-		if err := s.history.RecordPM2Snapshot(tickCtx, procs); err != nil {
+		if err := s.history.RecordPM2Snapshot(tickCtx, s.serverID, procs); err != nil {
 			log.Printf("history: pm2 snapshot write failed: %v", err)
 		}
-		if err := s.state.RecordProviderState(tickCtx, "pm2", true, toSnapshots(procs)); err != nil {
+		if err := s.state.RecordProviderState(tickCtx, s.serverID, "pm2", true, toSnapshots(s.serverID, procs)); err != nil {
 			log.Printf("history: pm2 state write failed: %v", err)
 		}
 	}
 
 	if containers, err := s.docker.ContainersList(true); err != nil {
 		log.Printf("history: docker list failed: %v", err)
-		_ = s.history.RecordProviderUnavailable(tickCtx, "docker")
-		_ = s.state.RecordProviderState(tickCtx, "docker", false, nil)
+		_ = s.history.RecordProviderUnavailable(tickCtx, s.serverID, "docker")
+		_ = s.state.RecordProviderState(tickCtx, s.serverID, "docker", false, nil)
 	} else {
-		if err := s.history.RecordDockerSnapshot(tickCtx, containers); err != nil {
+		if err := s.history.RecordDockerSnapshot(tickCtx, s.serverID, containers); err != nil {
 			log.Printf("history: docker snapshot write failed: %v", err)
 		}
-		if err := s.state.RecordProviderState(tickCtx, "docker", true, toDockerSnapshots(containers)); err != nil {
+		if err := s.state.RecordProviderState(tickCtx, s.serverID, "docker", true, toDockerSnapshots(s.serverID, containers)); err != nil {
 			log.Printf("history: docker state write failed: %v", err)
 		}
 	}
 
 	usage := s.system.SystemUsage()
-	if err := s.history.RecordSystemSnapshot(tickCtx, usage); err != nil {
+	if err := s.history.RecordSystemSnapshot(tickCtx, s.serverID, usage); err != nil {
 		log.Printf("history: system snapshot write failed: %v", err)
 	}
-	if err := s.state.RecordHostState(tickCtx, usage); err != nil {
-		log.Printf("history: host state write failed: %v", err)
+	if err := s.state.RecordServerUsage(tickCtx, s.serverID, usage); err != nil {
+		log.Printf("history: server usage write failed: %v", err)
 	}
 }
 
-func toSnapshots(procs []models.PM2Process) []models.ServiceSnapshot {
+func toSnapshots(serverID string, procs []models.PM2Process) []models.ServiceSnapshot {
 	now := time.Now().UTC()
 	out := make([]models.ServiceSnapshot, 0, len(procs))
 	for _, p := range procs {
 		out = append(out, models.ServiceSnapshot{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderPM2,
 				ServiceID: fmt.Sprintf("%d", p.PMID),
 				Name:      p.Name,
@@ -115,13 +118,14 @@ func toSnapshots(procs []models.PM2Process) []models.ServiceSnapshot {
 	return out
 }
 
-func toDockerSnapshots(containers []models.DockerContainer) []models.ServiceSnapshot {
+func toDockerSnapshots(serverID string, containers []models.DockerContainer) []models.ServiceSnapshot {
 	now := time.Now().UTC()
 	out := make([]models.ServiceSnapshot, 0, len(containers))
 	for _, c := range containers {
 		out = append(out, models.ServiceSnapshot{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderDocker,
 				ServiceID: c.ID,
 				Name:      c.Name,

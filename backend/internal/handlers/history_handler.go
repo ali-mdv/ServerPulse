@@ -29,17 +29,18 @@ const (
 func (h *historyHandler) ListServices(c *gin.Context) {
 	provider := c.Param("provider")
 	if !validProvider(provider) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "provider must be 'pm2' or 'docker'"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "provider must be 'pm2' or 'docker' or 'system'"})
 		return
 	}
 
-	services, err := h.service.ListTrackedServices(c.Request.Context(), provider)
+	services, err := h.service.ListTrackedServices(c.Request.Context(), serverIDOrLocal(c), provider)
 	if err != nil {
 		respondHistoryError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"serverId": serverIDOrLocal(c),
 		"provider": provider,
 		"services": dtos.ToTrackedServiceDTOs(services),
 	})
@@ -49,7 +50,7 @@ func (h *historyHandler) GetSeries(c *gin.Context) {
 	provider := c.Param("provider")
 	serviceID := c.Param("serviceId")
 	if !validProvider(provider) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "provider must be 'pm2' or 'docker'"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "provider must be 'pm2' or 'docker' or 'system'"})
 		return
 	}
 	if strings.TrimSpace(serviceID) == "" {
@@ -57,19 +58,21 @@ func (h *historyHandler) GetSeries(c *gin.Context) {
 		return
 	}
 
+	serverID := serverIDOrLocal(c)
 	from, to, bucket, err := parseRange(c, defaultRange)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	points, err := h.service.FindSeries(c.Request.Context(), provider, serviceID, from, to, bucket)
+	points, err := h.service.FindSeries(c.Request.Context(), serverID, provider, serviceID, from, to, bucket)
 	if err != nil {
 		respondHistoryError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"serverId":  serverID,
 		"provider":  provider,
 		"serviceId": serviceID,
 		"from":      from,

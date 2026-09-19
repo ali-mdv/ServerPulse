@@ -64,7 +64,11 @@ func ToSnapshotDTOs(in []models.ServiceSnapshot) []ServiceSnapshotDTO {
 	return out
 }
 
+// TrackedServiceDTO mirrors SnapshotMeta but flattens the server
+// origin to the top level so list endpoints can scope by server
+// without exposing the internal nested-meta shape.
 type TrackedServiceDTO struct {
+	ServerID  string `json:"serverId"`
 	Provider  string `json:"provider"`
 	ServiceID string `json:"serviceId"`
 	Name      string `json:"name"`
@@ -72,6 +76,7 @@ type TrackedServiceDTO struct {
 
 func ToTrackedServiceDTO(m models.SnapshotMeta) TrackedServiceDTO {
 	return TrackedServiceDTO{
+		ServerID:  m.ServerID,
 		Provider:  m.Provider,
 		ServiceID: m.ServiceID,
 		Name:      m.Name,

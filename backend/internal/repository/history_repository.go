@@ -19,9 +19,9 @@ const historyCollection = "service_history"
 type HistoryRepository interface {
 	EnsureCollection(ctx context.Context, retention time.Duration) error
 	InsertBatch(ctx context.Context, snapshots []models.ServiceSnapshot) error
-	ListTrackedServices(ctx context.Context, provider string) ([]models.SnapshotMeta, error)
-	FindSeries(ctx context.Context, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error)
-	FindAvailability(ctx context.Context, provider string, from, to time.Time) ([]models.ServiceSnapshot, error)
+	ListTrackedServices(ctx context.Context, serverID, provider string) ([]models.SnapshotMeta, error)
+	FindSeries(ctx context.Context, serverID, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error)
+	FindAvailability(ctx context.Context, serverID, provider string, from, to time.Time) ([]models.ServiceSnapshot, error)
 }
 
 type historyRepository struct {
@@ -95,14 +95,17 @@ func (r *historyRepository) InsertBatch(ctx context.Context, snapshots []models.
 	return err
 }
 
-func (r *historyRepository) ListTrackedServices(ctx context.Context, provider string) ([]models.SnapshotMeta, error) {
+func (r *historyRepository) ListTrackedServices(ctx context.Context, serverID, provider string) ([]models.SnapshotMeta, error) {
+	match := bson.D{
+		{Key: "meta.serverId", Value: serverID},
+		{Key: "meta.provider", Value: provider},
+		{Key: "meta.serviceId", Value: bson.D{{Key: "$ne", Value: models.ProviderStatusSentinelID}}},
+	}
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.D{
-			{Key: "meta.provider", Value: provider},
-			{Key: "meta.serviceId", Value: bson.D{{Key: "$ne", Value: models.ProviderStatusSentinelID}}},
-		}}},
+		{{Key: "$match", Value: match}},
 		{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: bson.D{
+				{Key: "serverId", Value: "$meta.serverId"},
 				{Key: "provider", Value: "$meta.provider"},
 				{Key: "serviceId", Value: "$meta.serviceId"},
 				{Key: "name", Value: "$meta.name"},
@@ -110,6 +113,7 @@ func (r *historyRepository) ListTrackedServices(ctx context.Context, provider st
 		}}},
 		{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
+			{Key: "serverId", Value: "$_id.serverId"},
 			{Key: "provider", Value: "$_id.provider"},
 			{Key: "serviceId", Value: "$_id.serviceId"},
 			{Key: "name", Value: "$_id.name"},
@@ -133,8 +137,9 @@ func (r *historyRepository) ListTrackedServices(ctx context.Context, provider st
 	return out, cursor.Err()
 }
 
-func (r *historyRepository) FindSeries(ctx context.Context, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error) {
+func (r *historyRepository) FindSeries(ctx context.Context, serverID, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error) {
 	match := bson.D{
+		{Key: "meta.serverId", Value: serverID},
 		{Key: "meta.provider", Value: provider},
 		{Key: "meta.serviceId", Value: serviceID},
 		{Key: "ts", Value: bson.D{
@@ -210,6 +215,6 @@ func (r *historyRepository) FindSeries(ctx context.Context, provider, serviceID 
 	return out, nil
 }
 
-func (r *historyRepository) FindAvailability(ctx context.Context, provider string, from, to time.Time) ([]models.ServiceSnapshot, error) {
-	return r.FindSeries(ctx, provider, models.ProviderStatusSentinelID, from, to, 0)
+func (r *historyRepository) FindAvailability(ctx context.Context, serverID, provider string, from, to time.Time) ([]models.ServiceSnapshot, error) {
+	return r.FindSeries(ctx, serverID, provider, models.ProviderStatusSentinelID, from, to, 0)
 }
