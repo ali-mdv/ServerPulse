@@ -17,6 +17,7 @@ type HistoryService interface {
 	RecordDockerSnapshot(ctx context.Context, serverID string, containers []models.DockerContainer) error
 	RecordSystemSnapshot(ctx context.Context, serverID string, usage models.SystemUsage) error
 	RecordProviderUnavailable(ctx context.Context, serverID, provider string) error
+	InsertHistoryBatch(ctx context.Context, snapshots []models.ServiceSnapshot) error
 	ListTrackedServices(ctx context.Context, serverID, provider string) ([]models.SnapshotMeta, error)
 	FindSeries(ctx context.Context, serverID, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error)
 }
@@ -106,6 +107,13 @@ func (s *historyService) RecordProviderUnavailable(ctx context.Context, serverID
 		return err
 	}
 	return nil
+}
+
+// InsertHistoryBatch is the provider-agnostic write path used by the
+// agent ingestion service. Callers are responsible for stamping
+// Meta.ServerID, Meta.Provider and Ts on each snapshot.
+func (s *historyService) InsertHistoryBatch(ctx context.Context, snapshots []models.ServiceSnapshot) error {
+	return s.repo.InsertBatch(ctx, snapshots)
 }
 
 func (s *historyService) RecordSystemSnapshot(ctx context.Context, serverID string, usage models.SystemUsage) error {

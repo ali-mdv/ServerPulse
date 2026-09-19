@@ -12,6 +12,8 @@ type Services struct {
 	System  services.SystemService
 	History services.HistoryService
 	State   services.StateService
+	Servers services.ServerService
+	Agent   services.AgentService
 }
 
 func RegisterV1Routes(r *gin.RouterGroup, s *Services) {
@@ -26,6 +28,7 @@ func RegisterV1Routes(r *gin.RouterGroup, s *Services) {
 		RegisterPM2Routes(api, s.PM2)
 		RegisterHistoryRoutes(api, s.History)
 		RegisterStateRoutes(api, s.State)
+		RegisterServerRoutes(api, s)
+		RegisterAgentRoutes(api, s)
 	}
-
 }
