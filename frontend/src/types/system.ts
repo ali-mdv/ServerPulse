@@ -50,6 +50,7 @@ export interface PM2Service {
 
 export interface GetPm2ServicesList {
   processes: PM2Service[];
+  available: boolean;
 }
 
 export const enum DockerContainerState {
@@ -81,6 +82,7 @@ export interface DockerContainer {
 
 export interface GetDockerContainersList {
   containers: DockerContainer[];
+  available: boolean;
 }
 
 export const enum ServiceAction {

@@ -21,6 +21,15 @@ func NewPM2Handler(service services.PM2Service) *PM2Handler {
 func (h *PM2Handler) ProcessList(c *gin.Context) {
 	processes, err := h.service.List()
 	if err != nil {
+		// Polling endpoint: degrade instead of failing. The frontend hides
+		// the PM2 section when the daemon is not present.
+		if errors.IsUnavailable(err) {
+			c.JSON(http.StatusOK, gin.H{
+				"processes": []any{},
+				"available": false,
+			})
+			return
+		}
 		fmt.Println(err)
 		switch e := err.(type) {
 		case *errors.AppError:
@@ -36,6 +45,7 @@ func (h *PM2Handler) ProcessList(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"processes": processes,
+		"available": true,
 	})
 }
 

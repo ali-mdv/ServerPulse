@@ -65,12 +65,16 @@ export const useSystemStore = defineStore("system", () => {
     }
   }
 
-  async function fetchPM2Services(): Promise<PM2Service[]> {
+  async function fetchPM2Services():
+    Promise<{ services: PM2Service[]; available: boolean }> {
     try {
       const response = await api.get<GetPm2ServicesList>("pm2/services", {
         headers: { Authorization: authStore.getToken() },
       });
-      return response.data.processes;
+      return {
+        services: response.data.processes,
+        available: response.data.available,
+      };
     } catch (err) {
       if (axios.isAxiosError(err)) {
         if (err.response.status === axios.HttpStatusCode.Unauthorized) {
@@ -81,7 +85,8 @@ export const useSystemStore = defineStore("system", () => {
     }
   }
 
-  async function fetchDockerContainers(): Promise<DockerContainer[]> {
+  async function fetchDockerContainers():
+    Promise<{ containers: DockerContainer[]; available: boolean }> {
     try {
       const response = await api.get<GetDockerContainersList>(
         "docker/containers",
@@ -89,7 +94,10 @@ export const useSystemStore = defineStore("system", () => {
           headers: { Authorization: authStore.getToken() },
         },
       );
-      return response.data.containers;
+      return {
+        containers: response.data.containers,
+        available: response.data.available,
+      };
     } catch (err) {
       if (axios.isAxiosError(err)) {
         if (err.response.status === axios.HttpStatusCode.Unauthorized) {

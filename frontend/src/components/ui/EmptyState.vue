@@ -27,6 +27,8 @@
 </template>
 
 <script setup lang="ts">
+import { cn } from "@/lib/utils";
+
 interface Props {
   title?: string;
   description?: string;

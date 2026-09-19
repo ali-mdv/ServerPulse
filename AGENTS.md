@@ -68,6 +68,7 @@ If PM2's daemon is down, `Dial` fails and the service keeps the error to surface
 | Task                          | Command                                          |
 |-------------------------------|--------------------------------------------------|
 | Run everything                | `docker compose up --build` (from repo root)     |
+| Run in dev (hot reload)       | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build` (code mounted read-only; rebuild only when `backend/go.mod`/`go.sum` or `frontend/pnpm-lock.yaml` change) |
 | Backend tests                 | `cd backend && go test ./...`                    |
 | Backend only (local)          | `cd backend && air` (requires local mongod)      |
 | Frontend only (local)         | `cd frontend && pnpm dev`                        |

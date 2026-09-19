@@ -71,8 +71,10 @@
 
     <!-- Services List -->
     <ServiceManagerPanel
-      :services="pm2Services"
-      :containers="dockerContainers"
+      :services="pm2Available ? pm2Services : []"
+      :pm2-available="pm2Available"
+      :containers="dockerAvailable ? dockerContainers : []"
+      :docker-available="dockerAvailable"
       :loading="servicesLoading"
     />
 
@@ -484,7 +486,9 @@ function updateNetwork(io: NetIOInfo) {
 }
 
 const pm2Services = ref<PM2Service[]>([]);
+const pm2Available = ref(true);
 const dockerContainers = ref<DockerContainer[]>([]);
+const dockerAvailable = ref(true);
 
 const highUsageServers = computed(() =>
   allServers.value
@@ -510,8 +514,9 @@ async function loadSystemUsage() {
 
 async function loadPm2Services() {
   try {
-    const data = await systemStore.fetchPM2Services();
-    pm2Services.value = data;
+    const { services, available } = await systemStore.fetchPM2Services();
+    pm2Services.value = services;
+    pm2Available.value = available;
   } catch (err: any) {
     toast.add({ severity: "error", summary: "Error", detail: err.message });
   } finally {
@@ -521,8 +526,10 @@ async function loadPm2Services() {
 
 async function loadDockerContainers() {
   try {
-    const data = await systemStore.fetchDockerContainers();
-    dockerContainers.value = data;
+    const { containers, available } =
+      await systemStore.fetchDockerContainers();
+    dockerContainers.value = containers;
+    dockerAvailable.value = available;
   } catch (err: any) {
     toast.add({ severity: "error", summary: "Error", detail: err.message });
   }

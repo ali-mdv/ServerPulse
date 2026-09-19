@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <section v-if="props.services.length">
+    <section v-if="props.pm2Available && props.services.length">
       <header class="flex items-center justify-between mb-3">
         <h3 class="text-base font-semibold">PM2 Services</h3>
         <Badge tone="neutral">{{ props.services.length }}</Badge>
@@ -14,7 +14,7 @@
       </div>
     </section>
 
-    <section v-if="props.containers.length">
+    <section v-if="props.dockerAvailable && props.containers.length">
       <header class="flex items-center justify-between mb-3">
         <h3 class="text-base font-semibold">Docker Containers</h3>
         <Badge tone="neutral">{{ props.containers.length }}</Badge>
@@ -30,8 +30,8 @@
 
     <EmptyState
       v-if="!props.loading && !props.services.length && !props.containers.length"
-      title="No services running"
-      description="Once this server starts managing processes or containers they'll appear here."
+      title="Services not available"
+      description="No processes or containers are being managed right now. If a provider (PM2, Docker) is not installed or its socket is unreachable, its section is hidden."
     />
 
     <div v-if="props.loading" class="grid gap-3">
@@ -41,9 +41,9 @@
 </template>
 
 <script lang="ts" setup>
+import { PM2Service, DockerContainer } from "@/types";
 import Pm2ServiceItem from "@/components/Pm2ServiceItem.vue";
 import DockerContainerItem from "@/components/DockerContainerItem.vue";
-import { PM2Service, DockerContainer } from "@/types";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import Badge from "@/components/ui/Badge.vue";
 import Skeleton from "@/components/ui/Skeleton.vue";
@@ -51,6 +51,8 @@ import Skeleton from "@/components/ui/Skeleton.vue";
 const props = defineProps<{
   services: PM2Service[];
   containers: DockerContainer[];
+  pm2Available?: boolean;
+  dockerAvailable?: boolean;
   loading?: boolean;
 }>();
 </script>

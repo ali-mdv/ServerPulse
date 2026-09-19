@@ -1,0 +1,72 @@
+# Development overlay: hot-reload with code bind mounts (read-only).
+# Usage:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Rebuilds are only needed when dependencies change, not for code edits:
+#   backend  -> ./backend/go.mod / go.sum
+#   frontend -> ./frontend/pnpm-lock.yaml
+#
+# Frontend:   http://localhost:8080  (vite dev server, HMR)
+# Backend:    http://localhost:12000 (air hot-reload)
+# VITE_SERVER_ADDRESS is injected at runtime so the browser talks to the
+# host-published backend directly (vite has no nginx-style /api proxy).
+name: serverpulse-dev
+
+services:
+  # One-shot fixer: named volumes are created root-owned, but the backend
+  # runs as HOST_UID. Chown the writable volumes before it starts.
+  perms-init:
+    image: alpine:3.20
+    user: "0:0"
+    command: ["sh", "-c", "chown -R \"${HOST_UID:-1000}:${HOST_GID:-1000}\" /out /gomod && touch /done"]
+    volumes:
+      - backend_out:/out
+      - backend_gomod:/gomod
+
+  backend:
+    # Override build so `up --build` uses the dev toolchain image.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    image: serverpulse/backend-dev:${BACKEND_VERSION:-dev}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      perms-init:
+        condition: service_completed_successfully
+    environment:
+      - GIN_MODE=debug
+    volumes:
+      # Source: read-only bind mount (air only writes binaries to /out).
+      - ./backend:/src:ro
+      # Writable scratch space for air's build artifacts + go caches.
+      - backend_out:/out
+      - backend_gomod:/gomod
+    ports:
+      - "12000:12000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    image: serverpulse/frontend-dev:${FRONTEND_VERSION:-dev}
+    environment:
+      - GIN_MODE=debug
+      - VITE_SERVER_ADDRESS=http://localhost:12000
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api/v1}
+      - VITE_API_TIME_OUT=${VITE_API_TIME_OUT:-10000}
+      - VITE_ENVIRONMENT=${VITE_ENVIRONMENT:-development}
+      - VITE_APP_NAME=${VITE_APP_NAME:-ServerMon}
+      - VITE_APP_VERSION=${VITE_APP_VERSION:-1.0.0}
+    volumes:
+      # Source: read-only bind mount. node_modules is baked into the image
+      # (see frontend/Dockerfile.dev) and the vite dep-cache lives in the
+      # container's writable layer.
+      - ./frontend:/app:ro
+    ports: !override
+      # vite.config.ts serves on 8080 (not nginx's 80).
+      # !override discards the base file's `3012:80` (nginx) mapping so the
+      # same host port isn't bound twice (compose merges `ports` by append).
+      - "${FRONTEND_PORT:-8080}:8080"
+
+volumes:
+  backend_out:
+  backend_gomod:
