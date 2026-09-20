@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"server-monitoring/internal/dtos"
@@ -139,6 +140,7 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 		return
 	}
 	if err := h.serverSvc.Delete(c.Request.Context(), id); err != nil {
+		fmt.Println(err)
 		respondServerError(c, err)
 		return
 	}

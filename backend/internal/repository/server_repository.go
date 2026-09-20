@@ -48,7 +48,7 @@ func (r *serverRepository) Insert(ctx context.Context, s models.Server) (*models
 
 func (r *serverRepository) FindByID(ctx context.Context, id bson.ObjectID) (*models.Server, error) {
 	var s models.Server
-	if err := r.Collection.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&s); err != nil {
+	if err := r.Collection.FindOne(ctx, idFilter(id)).Decode(&s); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil
 		}
@@ -100,7 +100,7 @@ func (r *serverRepository) UpdateByID(ctx context.Context, id bson.ObjectID, upd
 	if len(update) == 0 {
 		return r.FindByID(ctx, id)
 	}
-	if _, err := r.Collection.UpdateByID(ctx, id, update); err != nil {
+	if _, err := r.Collection.UpdateOne(ctx, idFilter(id), update); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, fmt.Errorf("server: %w", err)
 		}
@@ -110,12 +110,12 @@ func (r *serverRepository) UpdateByID(ctx context.Context, id bson.ObjectID, upd
 }
 
 func (r *serverRepository) DeleteByID(ctx context.Context, id bson.ObjectID) error {
-	res, err := r.Collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: id}})
+	res, err := r.Collection.DeleteOne(ctx, idFilter(id))
 	if err != nil {
 		return fmt.Errorf("delete server: %w", err)
 	}
 	if res.DeletedCount == 0 {
-		return fmt.Errorf("delete server: not found")
+		return mongo.ErrNoDocuments
 	}
 	return nil
 }
@@ -131,8 +131,21 @@ func (r *serverRepository) TouchSeen(ctx context.Context, id bson.ObjectID, stat
 			{Key: "status", Value: status},
 		},
 	}}
-	if _, err := r.Collection.UpdateByID(ctx, id, update); err != nil {
+	if _, err := r.Collection.UpdateOne(ctx, idFilter(id), update); err != nil {
 		return fmt.Errorf("touch server: %w", err)
 	}
 	return nil
+}
+
+// idFilter matches a document whose _id is either the ObjectID or its hex
+// string form. This makes the repository resilient against documents that
+// were inserted with a string _id (e.g. manual seeding).
+func idFilter(id bson.ObjectID) bson.D {
+	return bson.D{{
+		Key: "$or",
+		Value: bson.A{
+			bson.D{{Key: "_id", Value: id}},
+			bson.D{{Key: "_id", Value: id.Hex()}},
+		},
+	}}
 }

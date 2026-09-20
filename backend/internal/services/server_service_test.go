@@ -7,6 +7,7 @@ import (
 
 	"server-monitoring/internal/dtos"
 	"server-monitoring/internal/models"
+	apperrors "server-monitoring/pkg/errors"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -178,5 +179,20 @@ func TestGenerateAgentToken_UnknownServer(t *testing.T) {
 	_, _, err := svc.GenerateAgentToken(context.Background(), bson.NewObjectID())
 	if err != ErrServerNotFound {
 		t.Fatalf("expected ErrServerNotFound, got %v", err)
+	}
+}
+
+func TestDelete_LocalServerIsProtected(t *testing.T) {
+	repo := &fakeServerRepo{}
+	svc := &serverService{repo: repo}
+
+	local, err := svc.EnsureLocalServer(context.Background())
+	if err != nil {
+		t.Fatalf("ensure local server failed: %v", err)
+	}
+
+	err = svc.Delete(context.Background(), local.ID)
+	if err != apperrors.ErrForbidden {
+		t.Fatalf("expected ErrForbidden when deleting local server, got %v", err)
 	}
 }

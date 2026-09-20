@@ -10,6 +10,8 @@ import (
 	"server-monitoring/internal/services"
 	"server-monitoring/pkg/config"
 	database "server-monitoring/pkg/mongo"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const dbName = "server_monitoring"
@@ -39,14 +41,16 @@ func main() {
 	)
 
 	// Ensure the local host exists as a server record so the in-process
-	// scheduler's LocalServerID matches a real row. Best-effort — a
-	// failure here is logged but does not abort startup so the rest of
-	// the dashboard stays usable.
-	if _, err := serverService.EnsureLocalServer(context.Background()); err != nil {
+	// scheduler writes state under the same server ID the dashboard uses.
+	// Best-effort — a failure here is logged but does not abort startup.
+	localServerID := bson.NewObjectID()
+	if localServer, err := serverService.EnsureLocalServer(context.Background()); err != nil {
 		log.Printf("server: ensure local server failed: %v", err)
+	} else if localServer != nil {
+		localServerID = localServer.ID
 	}
 
-	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, cfg.HistoryPollInterval)
+	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, serverService, cfg.HistoryPollInterval, localServerID)
 	scheduler.Start(context.Background())
 
 	srv := routes.Setup(cfg, &v1.Services{

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"server-monitoring/internal/models"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type HistoryScheduler interface {
@@ -14,24 +16,26 @@ type HistoryScheduler interface {
 }
 
 type historyScheduler struct {
-	pm2      PM2Service
-	docker   DockerService
-	system   SystemService
-	history  HistoryService
-	state    StateService
-	interval time.Duration
-	serverID string
+	pm2         PM2Service
+	docker      DockerService
+	system      SystemService
+	history     HistoryService
+	state       StateService
+	servers     ServerService
+	interval    time.Duration
+	serverID    bson.ObjectID
 }
 
-func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemService, history HistoryService, state StateService, interval time.Duration) HistoryScheduler {
+func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemService, history HistoryService, state StateService, servers ServerService, interval time.Duration, serverID bson.ObjectID) HistoryScheduler {
 	return &historyScheduler{
 		pm2:      pm2,
 		docker:   docker,
 		system:   system,
 		history:  history,
 		state:    state,
+		servers:  servers,
 		interval: interval,
-		serverID: LocalServerID,
+		serverID: serverID,
 	}
 }
 
@@ -62,37 +66,45 @@ func (s *historyScheduler) tick(ctx context.Context) {
 	tickCtx, cancel := context.WithTimeout(ctx, s.interval)
 	defer cancel()
 
+	serverID := s.serverID.Hex()
+
+	// Heartbeat the local server row so its status/lastSeen reflect the
+	// in-process scheduler activity.
+	if err := s.servers.TouchSeen(tickCtx, s.serverID, models.ServerStatusOnline); err != nil {
+		log.Printf("history: local heartbeat failed: %v", err)
+	}
+
 	if procs, err := s.pm2.List(); err != nil {
 		log.Printf("history: pm2 list failed: %v", err)
-		_ = s.history.RecordProviderUnavailable(tickCtx, s.serverID, "pm2")
-		_ = s.state.RecordProviderState(tickCtx, s.serverID, "pm2", false, nil)
+		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, "pm2")
+		_ = s.state.RecordProviderState(tickCtx, serverID, "pm2", false, nil)
 	} else {
-		if err := s.history.RecordPM2Snapshot(tickCtx, s.serverID, procs); err != nil {
+		if err := s.history.RecordPM2Snapshot(tickCtx, serverID, procs); err != nil {
 			log.Printf("history: pm2 snapshot write failed: %v", err)
 		}
-		if err := s.state.RecordProviderState(tickCtx, s.serverID, "pm2", true, toSnapshots(s.serverID, procs)); err != nil {
+		if err := s.state.RecordProviderState(tickCtx, serverID, "pm2", true, toSnapshots(serverID, procs)); err != nil {
 			log.Printf("history: pm2 state write failed: %v", err)
 		}
 	}
 
 	if containers, err := s.docker.ContainersList(true); err != nil {
 		log.Printf("history: docker list failed: %v", err)
-		_ = s.history.RecordProviderUnavailable(tickCtx, s.serverID, "docker")
-		_ = s.state.RecordProviderState(tickCtx, s.serverID, "docker", false, nil)
+		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, "docker")
+		_ = s.state.RecordProviderState(tickCtx, serverID, "docker", false, nil)
 	} else {
-		if err := s.history.RecordDockerSnapshot(tickCtx, s.serverID, containers); err != nil {
+		if err := s.history.RecordDockerSnapshot(tickCtx, serverID, containers); err != nil {
 			log.Printf("history: docker snapshot write failed: %v", err)
 		}
-		if err := s.state.RecordProviderState(tickCtx, s.serverID, "docker", true, toDockerSnapshots(s.serverID, containers)); err != nil {
+		if err := s.state.RecordProviderState(tickCtx, serverID, "docker", true, toDockerSnapshots(serverID, containers)); err != nil {
 			log.Printf("history: docker state write failed: %v", err)
 		}
 	}
 
 	usage := s.system.SystemUsage()
-	if err := s.history.RecordSystemSnapshot(tickCtx, s.serverID, usage); err != nil {
+	if err := s.history.RecordSystemSnapshot(tickCtx, serverID, usage); err != nil {
 		log.Printf("history: system snapshot write failed: %v", err)
 	}
-	if err := s.state.RecordServerUsage(tickCtx, s.serverID, usage); err != nil {
+	if err := s.state.RecordServerUsage(tickCtx, serverID, usage); err != nil {
 		log.Printf("history: server usage write failed: %v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -29,6 +30,7 @@ type ServerService interface {
 	Update(ctx context.Context, id bson.ObjectID, dto dtos.UpdateServerDTO) (*models.Server, error)
 	Delete(ctx context.Context, id bson.ObjectID) error
 	GenerateAgentToken(ctx context.Context, id bson.ObjectID) (*models.Server, string, error)
+	TouchSeen(ctx context.Context, id bson.ObjectID, status models.ServerStatus) error
 	ResolveByAgentToken(ctx context.Context, token string) (*models.Server, error)
 	EnsureLocalServer(ctx context.Context) (*models.Server, error)
 }
@@ -114,8 +116,19 @@ func (s *serverService) Update(ctx context.Context, id bson.ObjectID, dto dtos.U
 }
 
 func (s *serverService) Delete(ctx context.Context, id bson.ObjectID) error {
+	srv, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if srv == nil {
+		return ErrServerNotFound
+	}
+	if srv.Name == models.LocalServerName {
+		return apperrors.ErrForbidden
+	}
+
 	if err := s.repo.DeleteByID(ctx, id); err != nil {
-		if err.Error() == "delete server: not found" {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return ErrServerNotFound
 		}
 		return err
@@ -155,6 +168,10 @@ func (s *serverService) GenerateAgentToken(ctx context.Context, id bson.ObjectID
 		return nil, "", ErrServerNotFound
 	}
 	return updated, token, nil
+}
+
+func (s *serverService) TouchSeen(ctx context.Context, id bson.ObjectID, status models.ServerStatus) error {
+	return s.repo.TouchSeen(ctx, id, status)
 }
 
 func (s *serverService) ResolveByAgentToken(ctx context.Context, token string) (*models.Server, error) {
