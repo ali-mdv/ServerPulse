@@ -30,6 +30,12 @@ func NewUserService(dbName string) UserService {
 	return &userService{repo: userRepo}
 }
 
+// NewUserServiceFromRepo is the repo-backed constructor used by the
+// test/setup helpers. Not part of the stable API.
+func NewUserServiceFromRepo(repo repository.UserRepository) UserService {
+	return &userService{repo: repo}
+}
+
 func (s *userService) UsersList() (*[]models.User, error) {
 	return s.repo.UsersList()
 }

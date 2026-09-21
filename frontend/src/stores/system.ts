@@ -76,9 +76,9 @@ export const useSystemStore = defineStore("system", () => {
     }
   }
 
-  async function fetchSystemState(): Promise<SystemUsage> {
+  async function fetchSystemState(serverId?: string): Promise<SystemUsage> {
     try {
-      const response = await apiFetchSystemState();
+      const response = await apiFetchSystemState(serverId);
       if (!response.systemUsage) {
         throw new Error("No system state recorded yet");
       }
@@ -93,12 +93,12 @@ export const useSystemStore = defineStore("system", () => {
     }
   }
 
-  async function fetchServicesState(): Promise<{
+  async function fetchServicesState(serverId?: string): Promise<{
     pm2: ProviderState;
     docker: ProviderState;
   }> {
     try {
-      return await apiFetchServicesState();
+      return await apiFetchServicesState(serverId);
     } catch (err) {
       if (axios.isAxiosError(err)) {
         if (err.response.status === axios.HttpStatusCode.Unauthorized) {
@@ -309,8 +309,9 @@ export const useSystemStore = defineStore("system", () => {
       provider: HistoryProvider,
       serviceId: string,
       range: HistoryRange,
+      serverId?: string,
     ): Promise<ServiceSnapshot[]> =>
-      apiFetchServiceHistory(provider, serviceId, range),
+      apiFetchServiceHistory(provider, serviceId, range, serverId),
     startDockerContainer,
     stopDockerContainer,
     restartDockerContainer,

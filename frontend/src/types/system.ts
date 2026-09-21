@@ -101,6 +101,7 @@ export type HistoryProvider = "pm2" | "docker" | "system";
 export type SystemMetricKey = "cpu" | "memory" | "disk" | "network";
 
 export interface SnapshotMeta {
+  serverId?: string;
   provider: HistoryProvider;
   serviceId: string;
   name: string;

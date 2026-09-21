@@ -19,12 +19,13 @@
       role="alert"
       class="card card-body border-warning/40 bg-warning/10 text-sm"
     >
-      <strong class="font-semibold">Service not found.</strong>
-      It may have been stopped, removed, or its provider may be offline.
+      <strong class="font-semibold">Service is not running right now.</strong>
+      It may have been stopped, removed, or its provider may be offline. Any
+      recorded history is still shown below.
     </div>
 
     <div
-      v-else-if="loading"
+      v-if="loading"
       class="grid gap-3"
       role="status"
       aria-live="polite"
@@ -35,7 +36,7 @@
     </div>
 
     <div v-else class="space-y-4">
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div v-if="!notFound" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <div class="text-sm text-muted-foreground">Status</div>
           <div class="text-2xl font-bold mt-1">{{ statusLabel || "—" }}</div>
@@ -142,6 +143,10 @@ const systemStore = useSystemStore();
 
 const provider = computed(() => route.params.provider as HistoryProvider);
 const serviceId = computed(() => route.params.id as string);
+// Absent for the local server; the backend then resolves the local row itself.
+const serverId = computed(() =>
+  typeof route.query.serverId === "string" ? route.query.serverId : undefined,
+);
 
 const range = ref<HistoryRange>("1h");
 
@@ -221,6 +226,8 @@ const title = computed(() => {
   const name =
     pm2Service.value?.name ??
     dockerContainer.value?.name ??
+    // A stopped service has no live state, but its snapshots still carry a name.
+    history.value.at(-1)?.meta.name ??
     (notFound.value ? "" : serviceId.value);
   return name || "Service details";
 });
@@ -255,7 +262,9 @@ async function loadCurrent() {
   dockerContainer.value = null;
 
   try {
-    const { pm2, docker } = await systemStore.fetchServicesState();
+    const { pm2, docker } = await systemStore.fetchServicesState(
+      serverId.value,
+    );
 
     if (provider.value === "pm2") {
       const found = pm2.services.find(
@@ -301,6 +310,7 @@ async function loadHistory() {
       provider.value,
       serviceId.value,
       range.value,
+      serverId.value,
     );
   } catch (err) {
     history.value = [];
@@ -316,7 +326,7 @@ onMounted(() => {
 });
 
 watch(
-  () => [provider.value, serviceId.value],
+  () => [provider.value, serviceId.value, serverId.value],
   () => {
     loadCurrent();
     loadHistory();

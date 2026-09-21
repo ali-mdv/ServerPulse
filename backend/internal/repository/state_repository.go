@@ -13,49 +13,52 @@ import (
 
 const (
 	providerStateCollection = "provider_state"
-	hostStateCollection     = "host_state"
-	hostStateID             = "host"
+	serverUsageCollection   = "server_usage"
 )
 
 type StateRepository interface {
 	UpsertProviderState(ctx context.Context, state models.ProviderState) error
-	UpsertHostState(ctx context.Context, state models.HostState) error
-	GetProviderState(ctx context.Context, provider string) (*models.ProviderState, error)
-	GetHostState(ctx context.Context) (*models.HostState, error)
+	UpsertServerUsage(ctx context.Context, state models.ServerUsageState) error
+	GetProviderState(ctx context.Context, serverID, provider string) (*models.ProviderState, error)
+	GetServerUsage(ctx context.Context, serverID string) (*models.ServerUsageState, error)
 }
 
 type stateRepository struct {
 	providerCollection *mongo.Collection
-	hostCollection     *mongo.Collection
+	serverCollection   *mongo.Collection
 }
 
 func NewStateRepository(db *mongo.Database) StateRepository {
 	return &stateRepository{
 		providerCollection: db.Collection(providerStateCollection),
-		hostCollection:     db.Collection(hostStateCollection),
+		serverCollection:   db.Collection(serverUsageCollection),
 	}
 }
 
 func (r *stateRepository) UpsertProviderState(ctx context.Context, state models.ProviderState) error {
-	filter := bson.D{{Key: "_id", Value: state.Provider}}
+	filter := bson.D{
+		{Key: "serverId", Value: state.ServerID},
+		{Key: "provider", Value: state.Provider},
+	}
 	update := bson.D{{
 		Key: "$set",
 		Value: bson.D{
+			{Key: "serverId", Value: state.ServerID},
+			{Key: "provider", Value: state.Provider},
 			{Key: "updatedAt", Value: state.UpdatedAt},
 			{Key: "available", Value: state.Available},
 			{Key: "services", Value: state.Services},
 		},
 	}}
 	opts := options.UpdateOne().SetUpsert(true)
-	_, err := r.providerCollection.UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		return fmt.Errorf("upsert provider state %s: %w", state.Provider, err)
+	if _, err := r.providerCollection.UpdateOne(ctx, filter, update, opts); err != nil {
+		return fmt.Errorf("upsert provider state %s/%s: %w", state.ServerID, state.Provider, err)
 	}
 	return nil
 }
 
-func (r *stateRepository) UpsertHostState(ctx context.Context, state models.HostState) error {
-	filter := bson.D{{Key: "_id", Value: hostStateID}}
+func (r *stateRepository) UpsertServerUsage(ctx context.Context, state models.ServerUsageState) error {
+	filter := bson.D{{Key: "_id", Value: state.ServerID}}
 	update := bson.D{{
 		Key: "$set",
 		Value: bson.D{
@@ -64,33 +67,35 @@ func (r *stateRepository) UpsertHostState(ctx context.Context, state models.Host
 		},
 	}}
 	opts := options.UpdateOne().SetUpsert(true)
-	_, err := r.hostCollection.UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		return fmt.Errorf("upsert host state: %w", err)
+	if _, err := r.serverCollection.UpdateOne(ctx, filter, update, opts); err != nil {
+		return fmt.Errorf("upsert server usage %s: %w", state.ServerID, err)
 	}
 	return nil
 }
 
-func (r *stateRepository) GetProviderState(ctx context.Context, provider string) (*models.ProviderState, error) {
+func (r *stateRepository) GetProviderState(ctx context.Context, serverID, provider string) (*models.ProviderState, error) {
 	var state models.ProviderState
-	err := r.providerCollection.FindOne(ctx, bson.D{{Key: "_id", Value: provider}}).Decode(&state)
+	err := r.providerCollection.FindOne(ctx, bson.D{
+		{Key: "serverId", Value: serverID},
+		{Key: "provider", Value: provider},
+	}).Decode(&state)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get provider state %s: %w", provider, err)
+		return nil, fmt.Errorf("get provider state %s/%s: %w", serverID, provider, err)
 	}
 	return &state, nil
 }
 
-func (r *stateRepository) GetHostState(ctx context.Context) (*models.HostState, error) {
-	var state models.HostState
-	err := r.hostCollection.FindOne(ctx, bson.D{{Key: "_id", Value: hostStateID}}).Decode(&state)
+func (r *stateRepository) GetServerUsage(ctx context.Context, serverID string) (*models.ServerUsageState, error) {
+	var state models.ServerUsageState
+	err := r.serverCollection.FindOne(ctx, bson.D{{Key: "_id", Value: serverID}}).Decode(&state)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get host state: %w", err)
+		return nil, fmt.Errorf("get server usage %s: %w", serverID, err)
 	}
 	return &state, nil
 }

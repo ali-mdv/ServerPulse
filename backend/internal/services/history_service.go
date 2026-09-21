@@ -13,12 +13,13 @@ import (
 
 type HistoryService interface {
 	EnsureSchema(ctx context.Context) error
-	RecordPM2Snapshot(ctx context.Context, procs []models.PM2Process) error
-	RecordDockerSnapshot(ctx context.Context, containers []models.DockerContainer) error
-	RecordSystemSnapshot(ctx context.Context, usage models.SystemUsage) error
-	RecordProviderUnavailable(ctx context.Context, provider string) error
-	ListTrackedServices(ctx context.Context, provider string) ([]models.SnapshotMeta, error)
-	FindSeries(ctx context.Context, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error)
+	RecordPM2Snapshot(ctx context.Context, serverID string, procs []models.PM2Process) error
+	RecordDockerSnapshot(ctx context.Context, serverID string, containers []models.DockerContainer) error
+	RecordSystemSnapshot(ctx context.Context, serverID string, usage models.SystemUsage) error
+	RecordProviderUnavailable(ctx context.Context, serverID, provider string) error
+	InsertHistoryBatch(ctx context.Context, snapshots []models.ServiceSnapshot) error
+	ListTrackedServices(ctx context.Context, serverID, provider string) ([]models.SnapshotMeta, error)
+	FindSeries(ctx context.Context, serverID, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error)
 }
 
 type historyService struct {
@@ -35,17 +36,24 @@ func NewHistoryService(dbName string, retention time.Duration) (HistoryService, 
 	return &historyService{repo: repo, retention: retention}, nil
 }
 
+// NewHistoryServiceFromRepo is the repo-backed constructor used by the
+// test/setup helpers. Not part of the stable API.
+func NewHistoryServiceFromRepo(repo repository.HistoryRepository, retention time.Duration) HistoryService {
+	return &historyService{repo: repo, retention: retention}
+}
+
 func (s *historyService) EnsureSchema(ctx context.Context) error {
 	return s.repo.EnsureCollection(ctx, s.retention)
 }
 
-func (s *historyService) RecordPM2Snapshot(ctx context.Context, procs []models.PM2Process) error {
+func (s *historyService) RecordPM2Snapshot(ctx context.Context, serverID string, procs []models.PM2Process) error {
 	now := time.Now().UTC()
 	snapshots := make([]models.ServiceSnapshot, 0, len(procs))
 	for _, p := range procs {
 		snapshots = append(snapshots, models.ServiceSnapshot{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderPM2,
 				ServiceID: fmt.Sprintf("%d", p.PMID),
 				Name:      p.Name,
@@ -63,13 +71,14 @@ func (s *historyService) RecordPM2Snapshot(ctx context.Context, procs []models.P
 	return nil
 }
 
-func (s *historyService) RecordDockerSnapshot(ctx context.Context, containers []models.DockerContainer) error {
+func (s *historyService) RecordDockerSnapshot(ctx context.Context, serverID string, containers []models.DockerContainer) error {
 	now := time.Now().UTC()
 	snapshots := make([]models.ServiceSnapshot, 0, len(containers))
 	for _, c := range containers {
 		snapshots = append(snapshots, models.ServiceSnapshot{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderDocker,
 				ServiceID: c.ID,
 				Name:      c.Name,
@@ -88,10 +97,11 @@ func (s *historyService) RecordDockerSnapshot(ctx context.Context, containers []
 	return nil
 }
 
-func (s *historyService) RecordProviderUnavailable(ctx context.Context, provider string) error {
+func (s *historyService) RecordProviderUnavailable(ctx context.Context, serverID, provider string) error {
 	snap := models.ServiceSnapshot{
 		Ts: time.Now().UTC(),
 		Meta: models.SnapshotMeta{
+			ServerID:  serverID,
 			Provider:  provider,
 			ServiceID: models.ProviderStatusSentinelID,
 			Name:      models.ProviderStatusSentinelName,
@@ -105,12 +115,20 @@ func (s *historyService) RecordProviderUnavailable(ctx context.Context, provider
 	return nil
 }
 
-func (s *historyService) RecordSystemSnapshot(ctx context.Context, usage models.SystemUsage) error {
+// InsertHistoryBatch is the provider-agnostic write path used by the
+// agent ingestion service. Callers are responsible for stamping
+// Meta.ServerID, Meta.Provider and Ts on each snapshot.
+func (s *historyService) InsertHistoryBatch(ctx context.Context, snapshots []models.ServiceSnapshot) error {
+	return s.repo.InsertBatch(ctx, snapshots)
+}
+
+func (s *historyService) RecordSystemSnapshot(ctx context.Context, serverID string, usage models.SystemUsage) error {
 	now := time.Now().UTC()
 	snapshots := []models.ServiceSnapshot{
 		{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderSystem,
 				ServiceID: models.SystemMetricCPU,
 				Name:      "CPU",
@@ -121,6 +139,7 @@ func (s *historyService) RecordSystemSnapshot(ctx context.Context, usage models.
 		{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderSystem,
 				ServiceID: models.SystemMetricMemory,
 				Name:      "Memory",
@@ -132,6 +151,7 @@ func (s *historyService) RecordSystemSnapshot(ctx context.Context, usage models.
 		{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderSystem,
 				ServiceID: models.SystemMetricDisk,
 				Name:      "Disk",
@@ -142,6 +162,7 @@ func (s *historyService) RecordSystemSnapshot(ctx context.Context, usage models.
 		{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderSystem,
 				ServiceID: models.SystemMetricNetSent,
 				Name:      "Network Sent",
@@ -152,6 +173,7 @@ func (s *historyService) RecordSystemSnapshot(ctx context.Context, usage models.
 		{
 			Ts: now,
 			Meta: models.SnapshotMeta{
+				ServerID:  serverID,
 				Provider:  models.ProviderSystem,
 				ServiceID: models.SystemMetricNetRecv,
 				Name:      "Network Received",
@@ -167,13 +189,13 @@ func (s *historyService) RecordSystemSnapshot(ctx context.Context, usage models.
 	return nil
 }
 
-func (s *historyService) ListTrackedServices(ctx context.Context, provider string) ([]models.SnapshotMeta, error) {
-	return s.repo.ListTrackedServices(ctx, provider)
+func (s *historyService) ListTrackedServices(ctx context.Context, serverID, provider string) ([]models.SnapshotMeta, error) {
+	return s.repo.ListTrackedServices(ctx, serverID, provider)
 }
 
-func (s *historyService) FindSeries(ctx context.Context, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error) {
+func (s *historyService) FindSeries(ctx context.Context, serverID, provider, serviceID string, from, to time.Time, bucket time.Duration) ([]models.ServiceSnapshot, error) {
 	if bucket < 0 {
 		bucket = 0
 	}
-	return s.repo.FindSeries(ctx, provider, serviceID, from, to, bucket)
+	return s.repo.FindSeries(ctx, serverID, provider, serviceID, from, to, bucket)
 }

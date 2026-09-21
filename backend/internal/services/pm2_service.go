@@ -36,6 +36,13 @@ func NewPM2Service(socketPath string) PM2Service {
 	return &pm2Service{client: c}
 }
 
+// NewPM2ServiceFromDialErr builds a PM2Service that surfaces the given
+// dial error as a 503 on every call. Used by the test/setup helpers;
+// production callers should use NewPM2Service.
+func NewPM2ServiceFromDialErr(err error) PM2Service {
+	return &pm2Service{client: nil, dialErr: err}
+}
+
 func (s *pm2Service) notReady() error {
 	if s.dialErr != nil {
 		return errors.New(503, fmt.Sprintf("pm2 daemon unreachable: %s", s.dialErr))

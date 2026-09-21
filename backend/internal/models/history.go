@@ -2,7 +2,16 @@ package models
 
 import "time"
 
+// SnapshotMeta is the bucketing key for the service_history time-series
+// collection. It now carries the server origin so a single provider on
+// multiple servers (e.g. two PM2 daemons) can coexist without
+// collisions and history queries can be scoped to a specific server.
+//
+// MongoDB treats missing fields on old rows as empty strings, so the
+// pre-server history can still be read back; new writes always include
+// the field.
 type SnapshotMeta struct {
+	ServerID  string `bson:"serverId" json:"serverId"`
 	Provider  string `bson:"provider" json:"provider"`
 	ServiceID string `bson:"serviceId" json:"serviceId"`
 	Name      string `bson:"name" json:"name"`

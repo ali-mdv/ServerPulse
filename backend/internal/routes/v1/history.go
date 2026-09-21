@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterHistoryRoutes(r *gin.RouterGroup, history services.HistoryService) {
-	handler := handlers.NewHistoryHandler(history)
+func RegisterHistoryRoutes(r *gin.RouterGroup, history services.HistoryService, servers services.ServerService) {
+	handler := handlers.NewHistoryHandler(history, servers)
 
 	api := r.Group("/history")
 	api.Use(middlewares.AuthMiddleware())

@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"server-monitoring/internal/repository"
 	"server-monitoring/internal/routes"
 	v1 "server-monitoring/internal/routes/v1"
 	"server-monitoring/internal/services"
 	"server-monitoring/pkg/config"
 	database "server-monitoring/pkg/mongo"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const dbName = "server_monitoring"
@@ -16,6 +20,7 @@ func main() {
 	cfg := config.Load()
 
 	database.Init(cfg.DB.Host, cfg.DB.Port, cfg.DB.Username, cfg.DB.Password)
+	db := database.GetDatabase(dbName)
 
 	pm2Service := services.NewPM2Service(cfg.PM2SocketPath)
 	dockerService := services.NewDockerService()
@@ -25,8 +30,27 @@ func main() {
 		panic(fmt.Sprintf("history service: %v", err))
 	}
 	stateService := services.NewStateService(dbName)
+	serverService := services.NewServerService(dbName)
 
-	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, cfg.HistoryPollInterval)
+	// AgentService needs the raw server repo so it can stamp heartbeats
+	// without the serverService having to expose it.
+	agentService := services.NewAgentService(
+		repository.NewServerRepository(db),
+		stateService,
+		historyService,
+	)
+
+	// Ensure the local host exists as a server record so the in-process
+	// scheduler writes state under the same server ID the dashboard uses.
+	// Best-effort — a failure here is logged but does not abort startup.
+	localServerID := bson.NewObjectID()
+	if localServer, err := serverService.EnsureLocalServer(context.Background()); err != nil {
+		log.Printf("server: ensure local server failed: %v", err)
+	} else if localServer != nil {
+		localServerID = localServer.ID
+	}
+
+	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, serverService, cfg.HistoryPollInterval, localServerID)
 	scheduler.Start(context.Background())
 
 	srv := routes.Setup(cfg, &v1.Services{
@@ -35,6 +59,8 @@ func main() {
 		System:  systemService,
 		History: historyService,
 		State:   stateService,
+		Servers: serverService,
+		Agent:   agentService,
 	})
 	srv.Run(fmt.Sprintf(":%d", cfg.Port))
 }

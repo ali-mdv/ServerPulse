@@ -7,7 +7,9 @@ import {
   ProviderState,
 } from "@/types/system";
 
-export async function fetchServicesState(): Promise<{
+export async function fetchServicesState(
+  serverId?: string,
+): Promise<{
   pm2: ProviderState;
   docker: ProviderState;
 }> {
@@ -16,6 +18,7 @@ export async function fetchServicesState(): Promise<{
   try {
     const { data } = await api.get<GetServicesStateApi>("state/services", {
       headers: { Authorization: auth.getToken() },
+      params: serverId ? { serverId } : undefined,
     });
     return {
       pm2: data.pm2,
@@ -30,12 +33,15 @@ export async function fetchServicesState(): Promise<{
   }
 }
 
-export async function fetchSystemState(): Promise<GetSystemStateApi> {
+export async function fetchSystemState(
+  serverId?: string,
+): Promise<GetSystemStateApi> {
   const api = useApi();
   const auth = useAuthStore();
   try {
     const { data } = await api.get<GetSystemStateApi>("state/system", {
       headers: { Authorization: auth.getToken() },
+      params: serverId ? { serverId } : undefined,
     });
     return data;
   } catch (err) {

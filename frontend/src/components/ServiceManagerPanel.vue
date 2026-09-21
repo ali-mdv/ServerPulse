@@ -8,8 +8,9 @@
       <div class="grid gap-3">
         <Pm2ServiceItem
           v-for="s in props.services"
-          :key="s.pid"
+          :key="s.pm_id"
           :service="s"
+          :server-id="props.serverId"
         />
       </div>
     </section>
@@ -24,6 +25,7 @@
           v-for="c in props.containers"
           :key="c.id"
           :container="c"
+          :server-id="props.serverId"
         />
       </div>
     </section>
@@ -54,5 +56,7 @@ const props = defineProps<{
   pm2Available?: boolean;
   dockerAvailable?: boolean;
   loading?: boolean;
+  /** Scopes the per-service History links. Omit for the local server. */
+  serverId?: string;
 }>();
 </script>
