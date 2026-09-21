@@ -1,4 +1,4 @@
-package handlers
+package utils
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // in-process scheduler's data (written under the real row's ID) is found.
 // If the local server cannot be resolved, it falls back to the legacy
 // "local" sentinel so existing data isn't orphaned.
-func serverIDFromQuery(c *gin.Context, serverSvc services.ServerService) string {
+func ServerIDFromQuery(c *gin.Context, serverSvc services.ServerService) string {
 	id := c.Query("serverId")
 	if id != "" && id != models.LocalServerName {
 		return id

@@ -8,6 +8,7 @@ import (
 
 	"server-monitoring/internal/dtos"
 	"server-monitoring/internal/services"
+	"server-monitoring/internal/utils"
 	"server-monitoring/pkg/errors"
 
 	"github.com/gin-gonic/gin"
@@ -34,14 +35,14 @@ func (h *historyHandler) ListServices(c *gin.Context) {
 		return
 	}
 
-	services, err := h.service.ListTrackedServices(c.Request.Context(), serverIDFromQuery(c, h.servers), provider)
+	services, err := h.service.ListTrackedServices(c.Request.Context(), utils.ServerIDFromQuery(c, h.servers), provider)
 	if err != nil {
 		respondHistoryError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"serverId": serverIDFromQuery(c, h.servers),
+		"serverId": utils.ServerIDFromQuery(c, h.servers),
 		"provider": provider,
 		"services": dtos.ToTrackedServiceDTOs(services),
 	})
@@ -59,7 +60,7 @@ func (h *historyHandler) GetSeries(c *gin.Context) {
 		return
 	}
 
-	serverID := serverIDFromQuery(c, h.servers)
+	serverID := utils.ServerIDFromQuery(c, h.servers)
 	from, to, bucket, err := parseRange(c, defaultRange)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

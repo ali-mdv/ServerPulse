@@ -4,13 +4,14 @@ import (
 	"net/http"
 	"server-monitoring/internal/models"
 	"server-monitoring/internal/services"
+	"server-monitoring/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 type stateHandler struct {
-	service   services.StateService
-	servers   services.ServerService
+	service services.StateService
+	servers services.ServerService
 }
 
 func NewStateHandler(service services.StateService, servers services.ServerService) *stateHandler {
@@ -19,7 +20,7 @@ func NewStateHandler(service services.StateService, servers services.ServerServi
 
 func (h *stateHandler) GetServicesState(c *gin.Context) {
 	ctx := c.Request.Context()
-	serverID := serverIDFromQuery(c, h.servers)
+	serverID := utils.ServerIDFromQuery(c, h.servers)
 
 	pm2State, err := h.service.GetProviderState(ctx, serverID, "pm2")
 	if err != nil {
@@ -41,7 +42,7 @@ func (h *stateHandler) GetServicesState(c *gin.Context) {
 
 func (h *stateHandler) GetSystemState(c *gin.Context) {
 	ctx := c.Request.Context()
-	serverID := serverIDFromQuery(c, h.servers)
+	serverID := utils.ServerIDFromQuery(c, h.servers)
 
 	usageState, err := h.service.GetServerUsage(ctx, serverID)
 	if err != nil {
@@ -51,9 +52,9 @@ func (h *stateHandler) GetSystemState(c *gin.Context) {
 
 	if usageState == nil {
 		c.JSON(http.StatusOK, gin.H{
-			"serverId":     serverID,
-			"systemUsage":  nil,
-			"updatedAt":    nil,
+			"serverId":    serverID,
+			"systemUsage": nil,
+			"updatedAt":   nil,
 		})
 		return
 	}
