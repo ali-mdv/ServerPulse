@@ -7,13 +7,14 @@ import (
 )
 
 type Services struct {
-	PM2     services.PM2Service
-	Docker  services.DockerService
-	System  services.SystemService
-	History services.HistoryService
-	State   services.StateService
-	Servers services.ServerService
-	Agent   services.AgentService
+	PM2           services.PM2Service
+	Docker        services.DockerService
+	System        services.SystemService
+	History       services.HistoryService
+	State         services.StateService
+	Servers       services.ServerService
+	Agent         services.AgentService
+	Notifications services.NotificationService
 }
 
 func RegisterV1Routes(r *gin.RouterGroup, s *Services) {
@@ -30,5 +31,6 @@ func RegisterV1Routes(r *gin.RouterGroup, s *Services) {
 		RegisterStateRoutes(api, s.State, s.Servers)
 		RegisterServerRoutes(api, s)
 		RegisterAgentRoutes(api, s)
+		RegisterNotificationRoutes(api, s.Notifications, s.Servers)
 	}
 }
