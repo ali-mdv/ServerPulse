@@ -31,6 +31,12 @@ func main() {
 	}
 	stateService := services.NewStateService(dbName)
 	serverService := services.NewServerService(dbName)
+	notificationService := services.NewNotificationService(dbName)
+
+	// Best-effort index creation for the notification lookup pattern.
+	if err := notificationService.EnsureSchema(context.Background()); err != nil {
+		log.Printf("notifications: ensure schema failed: %v", err)
+	}
 
 	// AgentService needs the raw server repo so it can stamp heartbeats
 	// without the serverService having to expose it.
@@ -50,17 +56,18 @@ func main() {
 		localServerID = localServer.ID
 	}
 
-	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, serverService, cfg.HistoryPollInterval, localServerID)
+	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, serverService, notificationService, cfg.HistoryPollInterval, localServerID)
 	scheduler.Start(context.Background())
 
 	srv := routes.Setup(cfg, &v1.Services{
-		PM2:     pm2Service,
-		Docker:  dockerService,
-		System:  systemService,
-		History: historyService,
-		State:   stateService,
-		Servers: serverService,
-		Agent:   agentService,
+		PM2:           pm2Service,
+		Docker:        dockerService,
+		System:        systemService,
+		History:       historyService,
+		State:         stateService,
+		Servers:       serverService,
+		Agent:         agentService,
+		Notifications: notificationService,
 	})
 	srv.Run(fmt.Sprintf(":%d", cfg.Port))
 }
