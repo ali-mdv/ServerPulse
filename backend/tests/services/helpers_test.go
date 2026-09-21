@@ -384,12 +384,83 @@ func (h *fakeAgentHistory) FindSeries(context.Context, string, string, string, t
 	return nil, nil
 }
 
+// fakeNotificationRepo is the in-memory repository used by
+// services/notification_service_test.
+type fakeNotificationRepo struct {
+	items []models.Notification
+}
+
+func (r *fakeNotificationRepo) EnsureIndexes(context.Context) error { return nil }
+
+func (r *fakeNotificationRepo) Insert(_ context.Context, n models.Notification) error {
+	r.items = append(r.items, n)
+	return nil
+}
+
+func (r *fakeNotificationRepo) List(_ context.Context, serverID string, severity models.NotificationSeverity, unreadOnly bool, limit int) ([]models.Notification, error) {
+	out := []models.Notification{}
+	for _, n := range r.items {
+		if serverID != "" && n.ServerID != serverID {
+			continue
+		}
+		if severity != "" && n.Severity != severity {
+			continue
+		}
+		if unreadOnly && n.Read {
+			continue
+		}
+		out = append(out, n)
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (r *fakeNotificationRepo) MarkRead(_ context.Context, id bson.ObjectID) error {
+	for i := range r.items {
+		if r.items[i].ID == id {
+			r.items[i].Read = true
+			return nil
+		}
+	}
+	return mongo.ErrNoDocuments
+}
+
+func (r *fakeNotificationRepo) MarkAllRead(_ context.Context, serverID string) (int64, error) {
+	var updated int64
+	for i := range r.items {
+		if serverID != "" && r.items[i].ServerID != serverID {
+			continue
+		}
+		if !r.items[i].Read {
+			r.items[i].Read = true
+			updated++
+		}
+	}
+	return updated, nil
+}
+
+func (r *fakeNotificationRepo) CountUnread(_ context.Context, serverID string) (int64, error) {
+	var unread int64
+	for i := range r.items {
+		if serverID != "" && r.items[i].ServerID != serverID {
+			continue
+		}
+		if !r.items[i].Read {
+			unread++
+		}
+	}
+	return unread, nil
+}
+
 // assert that the test fakes still satisfy the interfaces.
 var (
-	_ repository.ServerRepository  = (*fakeServerRepo)(nil)
-	_ repository.UserRepository   = (*fakeUserRepo)(nil)
-	_ repository.StateRepository  = (*fakeStateRepo)(nil)
-	_ repository.HistoryRepository = (*fakeHistoryRepo)(nil)
+	_ repository.ServerRepository       = (*fakeServerRepo)(nil)
+	_ repository.UserRepository         = (*fakeUserRepo)(nil)
+	_ repository.StateRepository        = (*fakeStateRepo)(nil)
+	_ repository.HistoryRepository      = (*fakeHistoryRepo)(nil)
+	_ repository.NotificationRepository = (*fakeNotificationRepo)(nil)
 )
 
 // hashForTest returns a bcrypt hash with the cheapest cost so tests stay fast.
