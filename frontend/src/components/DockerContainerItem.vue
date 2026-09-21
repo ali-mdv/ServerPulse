@@ -76,7 +76,7 @@
           </template>
           Logs
         </Button>
-        <router-link :to="`/service/docker/${props.container.id}`">
+        <router-link :to="historyLink">
           <Button variant="outline" size="sm">
             <template #icon-left>
               <LineChart class="w-3.5 h-3.5" aria-hidden="true" />
@@ -115,9 +115,19 @@ import { useSystemStore } from "@/stores/system";
 import Badge from "@/components/ui/Badge.vue";
 import Button from "@/components/ui/Button.vue";
 
-const props = defineProps<{ container: DockerContainer }>();
+const props = defineProps<{
+  container: DockerContainer;
+  /** Scopes the History link so the detail page queries the right server. */
+  serverId?: string;
+}>();
 
 const toast = useToast();
+
+const historyLink = computed(() => ({
+  name: "serviceDetail",
+  params: { provider: "docker", id: props.container.id },
+  query: props.serverId ? { serverId: props.serverId } : {},
+}));
 
 const loading = ref(false);
 const actionInProgress = ref<ServiceAction | null>(null);

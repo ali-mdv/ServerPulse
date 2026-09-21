@@ -309,8 +309,9 @@ export const useSystemStore = defineStore("system", () => {
       provider: HistoryProvider,
       serviceId: string,
       range: HistoryRange,
+      serverId?: string,
     ): Promise<ServiceSnapshot[]> =>
-      apiFetchServiceHistory(provider, serviceId, range),
+      apiFetchServiceHistory(provider, serviceId, range, serverId),
     startDockerContainer,
     stopDockerContainer,
     restartDockerContainer,

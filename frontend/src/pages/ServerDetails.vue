@@ -121,6 +121,7 @@
             :containers="dockerContainers"
             :docker-available="dockerAvailable"
             :loading="servicesLoading"
+            :server-id="id"
           />
         </div>
 

@@ -67,7 +67,7 @@
           </template>
           Logs
         </Button>
-        <router-link :to="`/service/pm2/${props.service.pm_id}`">
+        <router-link :to="historyLink">
           <Button variant="outline" size="sm">
             <template #icon-left>
               <LineChart class="w-3.5 h-3.5" aria-hidden="true" />
@@ -102,7 +102,17 @@ import { PM2Service, PM2ServiceState, ServiceAction } from "@/types";
 import Badge from "@/components/ui/Badge.vue";
 import Button from "@/components/ui/Button.vue";
 
-const props = defineProps<{ service: PM2Service }>();
+const props = defineProps<{
+  service: PM2Service;
+  /** Scopes the History link so the detail page queries the right server. */
+  serverId?: string;
+}>();
+
+const historyLink = computed(() => ({
+  name: "serviceDetail",
+  params: { provider: "pm2", id: props.service.pm_id },
+  query: props.serverId ? { serverId: props.serverId } : {},
+}));
 
 function parseBytes(value: number, base = 1024, decimals = 2) {
   if (value === 0) return { number: 0, unit: "Bytes" };

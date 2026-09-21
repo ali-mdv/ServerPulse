@@ -35,13 +35,17 @@ export function rangeSeconds(range: HistoryRange): number {
 
 export async function fetchTrackedServices(
   provider: HistoryProvider,
+  serverId?: string,
 ): Promise<TrackedService[]> {
   const api = useApi();
   const auth = useAuthStore();
   try {
     const { data } = await api.get<GetTrackedServicesApi>(
       `history/${provider}/services`,
-      { headers: { Authorization: auth.getToken() } },
+      {
+        params: serverId ? { serverId } : undefined,
+        headers: { Authorization: auth.getToken() },
+      },
     );
     return data.services;
   } catch (err) {
@@ -57,6 +61,7 @@ export async function fetchServiceHistory(
   provider: HistoryProvider,
   serviceId: string,
   range: HistoryRange,
+  serverId?: string,
 ): Promise<ServiceSnapshot[]> {
   const api = useApi();
   const auth = useAuthStore();
@@ -71,6 +76,7 @@ export async function fetchServiceHistory(
           from: from.toISOString(),
           to: now.toISOString(),
           bucket,
+          ...(serverId ? { serverId } : {}),
         },
         headers: { Authorization: auth.getToken() },
       },
