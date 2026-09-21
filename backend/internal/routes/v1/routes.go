@@ -26,8 +26,8 @@ func RegisterV1Routes(r *gin.RouterGroup, s *Services) {
 		RegisterReportRoutes(api)
 		RegisterSystemRoutes(api, s.System)
 		RegisterPM2Routes(api, s.PM2)
-		RegisterHistoryRoutes(api, s.History)
-		RegisterStateRoutes(api, s.State)
+		RegisterHistoryRoutes(api, s.History, s.Servers)
+		RegisterStateRoutes(api, s.State, s.Servers)
 		RegisterServerRoutes(api, s)
 		RegisterAgentRoutes(api, s)
 	}

@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterStateRoutes(r *gin.RouterGroup, state services.StateService) {
-	handler := handlers.NewStateHandler(state)
+func RegisterStateRoutes(r *gin.RouterGroup, state services.StateService, servers services.ServerService) {
+	handler := handlers.NewStateHandler(state, servers)
 
 	api := r.Group("/state")
 	api.Use(middlewares.AuthMiddleware())

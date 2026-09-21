@@ -15,10 +15,11 @@ import (
 
 type historyHandler struct {
 	service services.HistoryService
+	servers services.ServerService
 }
 
-func NewHistoryHandler(service services.HistoryService) *historyHandler {
-	return &historyHandler{service: service}
+func NewHistoryHandler(service services.HistoryService, servers services.ServerService) *historyHandler {
+	return &historyHandler{service: service, servers: servers}
 }
 
 const (
@@ -33,14 +34,14 @@ func (h *historyHandler) ListServices(c *gin.Context) {
 		return
 	}
 
-	services, err := h.service.ListTrackedServices(c.Request.Context(), serverIDOrLocal(c), provider)
+	services, err := h.service.ListTrackedServices(c.Request.Context(), serverIDFromQuery(c, h.servers), provider)
 	if err != nil {
 		respondHistoryError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"serverId": serverIDOrLocal(c),
+		"serverId": serverIDFromQuery(c, h.servers),
 		"provider": provider,
 		"services": dtos.ToTrackedServiceDTOs(services),
 	})
@@ -58,7 +59,7 @@ func (h *historyHandler) GetSeries(c *gin.Context) {
 		return
 	}
 
-	serverID := serverIDOrLocal(c)
+	serverID := serverIDFromQuery(c, h.servers)
 	from, to, bucket, err := parseRange(c, defaultRange)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

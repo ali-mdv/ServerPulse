@@ -9,26 +9,17 @@ import (
 )
 
 type stateHandler struct {
-	service services.StateService
+	service   services.StateService
+	servers   services.ServerService
 }
 
-func NewStateHandler(service services.StateService) *stateHandler {
-	return &stateHandler{service: service}
-}
-
-// serverIDOrLocal resolves the server scope for state endpoints. It
-// accepts ?serverId=... and falls back to the local-server sentinel so
-// the dashboard can keep polling without knowing about multi-server.
-func serverIDOrLocal(c *gin.Context) string {
-	if id := c.Query("serverId"); id != "" {
-		return id
-	}
-	return services.LocalServerID
+func NewStateHandler(service services.StateService, servers services.ServerService) *stateHandler {
+	return &stateHandler{service: service, servers: servers}
 }
 
 func (h *stateHandler) GetServicesState(c *gin.Context) {
 	ctx := c.Request.Context()
-	serverID := serverIDOrLocal(c)
+	serverID := serverIDFromQuery(c, h.servers)
 
 	pm2State, err := h.service.GetProviderState(ctx, serverID, "pm2")
 	if err != nil {
@@ -50,7 +41,7 @@ func (h *stateHandler) GetServicesState(c *gin.Context) {
 
 func (h *stateHandler) GetSystemState(c *gin.Context) {
 	ctx := c.Request.Context()
-	serverID := serverIDOrLocal(c)
+	serverID := serverIDFromQuery(c, h.servers)
 
 	usageState, err := h.service.GetServerUsage(ctx, serverID)
 	if err != nil {
