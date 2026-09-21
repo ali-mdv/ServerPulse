@@ -151,3 +151,16 @@ func toDockerSnapshots(serverID string, containers []models.DockerContainer) []m
 	}
 	return out
 }
+
+// SnapshotsFromPM2 is the exported form of toSnapshots. Used by the
+// test/setup helpers; production code goes through HistoryScheduler.
+func SnapshotsFromPM2(serverID string, procs []models.PM2Process) []models.ServiceSnapshot {
+	return toSnapshots(serverID, procs)
+}
+
+// SnapshotsFromDocker is the exported form of toDockerSnapshots. Used
+// by the test/setup helpers; production code goes through
+// HistoryScheduler.
+func SnapshotsFromDocker(serverID string, containers []models.DockerContainer) []models.ServiceSnapshot {
+	return toDockerSnapshots(serverID, containers)
+}

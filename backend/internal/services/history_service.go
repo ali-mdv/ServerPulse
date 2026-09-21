@@ -36,6 +36,12 @@ func NewHistoryService(dbName string, retention time.Duration) (HistoryService, 
 	return &historyService{repo: repo, retention: retention}, nil
 }
 
+// NewHistoryServiceFromRepo is the repo-backed constructor used by the
+// test/setup helpers. Not part of the stable API.
+func NewHistoryServiceFromRepo(repo repository.HistoryRepository, retention time.Duration) HistoryService {
+	return &historyService{repo: repo, retention: retention}
+}
+
 func (s *historyService) EnsureSchema(ctx context.Context) error {
 	return s.repo.EnsureCollection(ctx, s.retention)
 }

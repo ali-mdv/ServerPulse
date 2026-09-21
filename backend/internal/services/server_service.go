@@ -44,6 +44,12 @@ func NewServerService(dbName string) ServerService {
 	return &serverService{repo: repository.NewServerRepository(db)}
 }
 
+// NewServerServiceFromRepo is the repo-backed constructor used by the
+// test/setup helpers. Not part of the stable API.
+func NewServerServiceFromRepo(repo repository.ServerRepository) ServerService {
+	return &serverService{repo: repo}
+}
+
 // Create registers a new server (agent) from its display name and an
 // optional description. The API key is intentionally left empty; it is
 // generated later via GenerateAgentToken so the creation step and the

@@ -146,3 +146,18 @@ func (s *agentService) touchIdentity(ctx context.Context, id bson.ObjectID, push
 	}
 	return nil
 }
+
+// IdentityChanged reports whether the push carries a different
+// identity from the stored server. Empty host/port from the push are
+// treated as "no opinion". Used by the test/setup helpers; production
+// code goes through AgentService.IngestPush.
+func IdentityChanged(server models.Server, push dtos.AgentPushDTO) bool {
+	return (&agentService{}).identityChanged(server, push)
+}
+
+// TouchIdentity updates the mutable CRUD fields the agent sent without
+// overwriting LastSeen / Status / AgentToken / CreatedAt. Used by the
+// test/setup helpers; production code goes through AgentService.IngestPush.
+func TouchIdentity(ctx context.Context, repo repository.ServerRepository, id bson.ObjectID, push dtos.AgentPushDTO) error {
+	return (&agentService{serverRepo: repo}).touchIdentity(ctx, id, push)
+}

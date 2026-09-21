@@ -32,6 +32,12 @@ func NewStateService(dbName string) StateService {
 	return &stateService{repo: repo}
 }
 
+// NewStateServiceFromRepo is the repo-backed constructor used by the
+// test/setup helpers. Not part of the stable API.
+func NewStateServiceFromRepo(repo repository.StateRepository) StateService {
+	return &stateService{repo: repo}
+}
+
 func (s *stateService) RecordProviderState(ctx context.Context, serverID, provider string, available bool, services []models.ServiceSnapshot) error {
 	if services == nil {
 		services = []models.ServiceSnapshot{}
