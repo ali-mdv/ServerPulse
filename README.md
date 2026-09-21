@@ -191,12 +191,13 @@ All routes are mounted under `/api/v1`.
 |--------------------|------------------------------------------|
 | `/api/v1/auth`     | login                                    |
 | `/api/v1/users`    | user CRUD                                |
+| `/api/v1/servers`  | server/agent CRUD + API-key generation   |
 | `/api/v1/docker`   | list containers, start/stop/restart/logs |
 | `/api/v1/pm2`      | list processes, start/stop/restart/logs  |
 | `/api/v1/system`   | per-host CPU / memory / disk / network   |
 | `/api/v1/report`   | aggregated reports                       |
 
-> There is no `/servers` endpoint — the multi-server list/details pages render bundled sample data on the frontend (`frontend/src/api/servers.ts`).
+> The frontend's server list/details pages use the real `/api/v1/servers` endpoints.
 
 Authentication: JWT bearer in `Authorization: Bearer <token>` header on protected routes.
 
