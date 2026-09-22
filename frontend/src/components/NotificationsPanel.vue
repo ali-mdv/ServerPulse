@@ -81,7 +81,12 @@
               v-for="alert in filteredAlerts"
               :key="alert.id"
               role="listitem"
-              class="p-4 hover:bg-muted/40 transition-colors"
+              :class="[
+                'p-4 transition-colors',
+                alert.acknowledged
+                  ? 'opacity-60 hover:bg-muted/40'
+                  : 'bg-primary/5 hover:bg-primary/10',
+              ]"
             >
               <div class="flex items-start gap-3">
                 <span
@@ -95,18 +100,36 @@
                 />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-medium truncate">
+                    <span
+                      :class="[
+                        'text-sm truncate',
+                        alert.acknowledged
+                          ? 'font-medium text-muted-foreground'
+                          : 'font-semibold',
+                      ]"
+                    >
                       {{ alert.title }}
                     </span>
                     <Badge :tone="severityTone(alert.severity)">
                       {{ alert.severity }}
                     </Badge>
+                    <span
+                      v-if="!alert.acknowledged"
+                      class="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                    >
+                      <span
+                        class="w-1.5 h-1.5 rounded-full bg-primary"
+                        aria-hidden="true"
+                      />
+                      <span class="sr-only">Unread</span>
+                    </span>
                   </div>
                   <div class="text-xs text-muted-foreground mt-1">
                     {{ alert.server }} • {{ alert.time }}
                   </div>
                   <div class="mt-2 flex items-center gap-2">
                     <Button
+                      v-if="!alert.acknowledged"
                       variant="outline"
                       size="sm"
                       @click="acknowledge(alert.id)"
@@ -114,6 +137,13 @@
                       <Check class="w-3.5 h-3.5" aria-hidden="true" />
                       Acknowledge
                     </Button>
+                    <span
+                      v-else
+                      class="inline-flex items-center gap-1 text-xs text-muted-foreground italic"
+                    >
+                      <Check class="w-3.5 h-3.5" aria-hidden="true" />
+                      Read
+                    </span>
                     <router-link
                       to="/alerts"
                       class="text-xs text-primary hover:underline focus-visible:underline"
