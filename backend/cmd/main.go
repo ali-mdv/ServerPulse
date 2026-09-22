@@ -25,10 +25,8 @@ func main() {
 	pm2Service := services.NewPM2Service(cfg.PM2SocketPath)
 	dockerService := services.NewDockerService()
 	systemService := services.NewSystemService()
-	historyService, err := services.NewHistoryService(dbName, cfg.HistoryRetention)
-	if err != nil {
-		panic(fmt.Sprintf("history service: %v", err))
-	}
+	settingsService := services.NewSettingsService(dbName)
+	historyService := services.NewHistoryService(dbName, settingsService)
 	stateService := services.NewStateService(dbName)
 	serverService := services.NewServerService(dbName)
 	notificationService := services.NewNotificationService(dbName)
@@ -56,7 +54,7 @@ func main() {
 		localServerID = localServer.ID
 	}
 
-	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, serverService, notificationService, cfg.HistoryPollInterval, localServerID)
+	scheduler := services.NewHistoryScheduler(pm2Service, dockerService, systemService, historyService, stateService, serverService, notificationService, settingsService, localServerID)
 	scheduler.Start(context.Background())
 
 	srv := routes.Setup(cfg, &v1.Services{
@@ -68,6 +66,7 @@ func main() {
 		Servers:       serverService,
 		Agent:         agentService,
 		Notifications: notificationService,
+		Settings:      settingsService,
 	})
 	srv.Run(fmt.Sprintf(":%d", cfg.Port))
 }

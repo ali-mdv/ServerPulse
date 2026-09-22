@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/go-viper/mapstructure/v2"
@@ -22,13 +21,11 @@ type MongoDB struct {
 }
 
 type Config struct {
-	Port                int           `mapstructure:"PORT" json:"port" validate:"required,min=1000,max=65535"`
-	GinMode             string        `mapstructure:"GIN_MODE" validate:"required,oneof=debug test release"`
-	DB                  MongoDB       `mapstructure:",squash" json:"db"`
-	Origins             []string      `mapstructure:"ORIGINS" json:"origins"`
-	PM2SocketPath       string        `mapstructure:"PM2_SOCKET_PATH" json:"pm2SocketPath"`
-	HistoryPollInterval time.Duration `mapstructure:"HISTORY_POLL_INTERVAL" json:"historyPollInterval"`
-	HistoryRetention    time.Duration `mapstructure:"HISTORY_RETENTION" json:"historyRetention"`
+	Port          int      `mapstructure:"PORT" json:"port" validate:"required,min=1000,max=65535"`
+	GinMode       string   `mapstructure:"GIN_MODE" validate:"required,oneof=debug test release"`
+	DB            MongoDB  `mapstructure:",squash" json:"db"`
+	Origins       []string `mapstructure:"ORIGINS" json:"origins"`
+	PM2SocketPath string   `mapstructure:"PM2_SOCKET_PATH" json:"pm2SocketPath"`
 }
 
 var Cfg *Config
@@ -66,13 +63,6 @@ func Load() *Config {
 
 		if err := viper.Unmarshal(&cfg, decodeHook); err != nil {
 			log.Fatalln(fmt.Errorf("error decode config file: %w", err))
-		}
-
-		if cfg.HistoryPollInterval <= 0 {
-			cfg.HistoryPollInterval = 30 * time.Second
-		}
-		if cfg.HistoryRetention <= 0 {
-			cfg.HistoryRetention = 7 * 24 * time.Hour
 		}
 
 		// Validate config using go-playground/validator

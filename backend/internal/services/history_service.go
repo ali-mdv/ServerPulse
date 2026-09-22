@@ -24,16 +24,17 @@ type HistoryService interface {
 
 type historyService struct {
 	repo      repository.HistoryRepository
+	settings  SettingsService
 	retention time.Duration
 }
 
-func NewHistoryService(dbName string, retention time.Duration) (HistoryService, error) {
-	if retention <= 0 {
-		return nil, fmt.Errorf("history retention must be positive, got %s", retention)
-	}
+// NewHistoryService builds the production service. Retention now comes
+// from the settings singleton, read on every EnsureSchema call, so a
+// settings change updates the TTL without a restart.
+func NewHistoryService(dbName string, settings SettingsService) HistoryService {
 	db := database.GetDatabase(dbName)
 	repo := repository.NewHistoryRepository(db)
-	return &historyService{repo: repo, retention: retention}, nil
+	return &historyService{repo: repo, settings: settings}
 }
 
 // NewHistoryServiceFromRepo is the repo-backed constructor used by the
@@ -42,8 +43,28 @@ func NewHistoryServiceFromRepo(repo repository.HistoryRepository, retention time
 	return &historyService{repo: repo, retention: retention}
 }
 
+// NewHistoryServiceWithSettings is the repo+settings-backed constructor
+// used by the test/setup helpers. Not part of the stable API.
+func NewHistoryServiceWithSettings(repo repository.HistoryRepository, settings SettingsService) HistoryService {
+	return &historyService{repo: repo, settings: settings}
+}
+
 func (s *historyService) EnsureSchema(ctx context.Context) error {
-	return s.repo.EnsureCollection(ctx, s.retention)
+	return s.repo.EnsureCollection(ctx, s.currentRetention(ctx))
+}
+
+// currentRetention resolves the retention to apply: the settings
+// singleton when configured, else the static value, else the default.
+func (s *historyService) currentRetention(ctx context.Context) time.Duration {
+	if s.settings != nil {
+		if retention, err := s.settings.HistoryRetention(ctx); err == nil && retention > 0 {
+			return retention
+		}
+	}
+	if s.retention > 0 {
+		return s.retention
+	}
+	return models.DefaultHistoryRetention
 }
 
 func (s *historyService) RecordPM2Snapshot(ctx context.Context, serverID string, procs []models.PM2Process) error {

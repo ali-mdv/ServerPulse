@@ -23,11 +23,11 @@ type historyScheduler struct {
 	state         StateService
 	servers       ServerService
 	notifications NotificationService
-	interval      time.Duration
+	settings      SettingsService
 	serverID      bson.ObjectID
 }
 
-func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemService, history HistoryService, state StateService, servers ServerService, notifications NotificationService, interval time.Duration, serverID bson.ObjectID) HistoryScheduler {
+func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemService, history HistoryService, state StateService, servers ServerService, notifications NotificationService, settings SettingsService, serverID bson.ObjectID) HistoryScheduler {
 	return &historyScheduler{
 		pm2:           pm2,
 		docker:        docker,
@@ -36,7 +36,7 @@ func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemServ
 		state:         state,
 		servers:       servers,
 		notifications: notifications,
-		interval:      interval,
+		settings:      settings,
 		serverID:      serverID,
 	}
 }
@@ -51,21 +51,50 @@ func (s *historyScheduler) Start(ctx context.Context) {
 	go s.run(ctx)
 }
 
+// run polls on the DB-configured interval, re-read every cycle so a
+// settings change takes effect without a restart. It also re-applies the
+// history schema whenever the retention setting changes.
 func (s *historyScheduler) run(ctx context.Context) {
-	ticker := time.NewTicker(s.interval)
-	defer ticker.Stop()
+	appliedRetention := s.retention(ctx)
 	for {
+		timer := time.NewTimer(s.pollInterval(ctx))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			s.tick(ctx)
+			if retention := s.retention(ctx); retention != appliedRetention {
+				if err := s.history.EnsureSchema(ctx); err != nil {
+					log.Printf("history: re-apply schema failed: %v", err)
+				} else {
+					appliedRetention = retention
+				}
+			}
 		}
 	}
 }
 
+func (s *historyScheduler) pollInterval(ctx context.Context) time.Duration {
+	if s.settings != nil {
+		if interval, err := s.settings.HistoryPollInterval(ctx); err == nil && interval > 0 {
+			return interval
+		}
+	}
+	return models.DefaultHistoryPollInterval
+}
+
+func (s *historyScheduler) retention(ctx context.Context) time.Duration {
+	if s.settings != nil {
+		if retention, err := s.settings.HistoryRetention(ctx); err == nil && retention > 0 {
+			return retention
+		}
+	}
+	return models.DefaultHistoryRetention
+}
+
 func (s *historyScheduler) tick(ctx context.Context) {
-	tickCtx, cancel := context.WithTimeout(ctx, s.interval)
+	tickCtx, cancel := context.WithTimeout(ctx, s.pollInterval(ctx))
 	defer cancel()
 
 	serverID := s.serverID.Hex()
