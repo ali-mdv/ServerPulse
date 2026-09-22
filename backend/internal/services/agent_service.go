@@ -23,16 +23,18 @@ type AgentService interface {
 }
 
 type agentService struct {
-	serverRepo repository.ServerRepository
-	state      StateService
-	history    HistoryService
+	serverRepo    repository.ServerRepository
+	state         StateService
+	history       HistoryService
+	notifications NotificationService
 }
 
-func NewAgentService(serverRepo repository.ServerRepository, state StateService, history HistoryService) AgentService {
+func NewAgentService(serverRepo repository.ServerRepository, state StateService, history HistoryService, notifications NotificationService) AgentService {
 	return &agentService{
-		serverRepo: serverRepo,
-		state:      state,
-		history:    history,
+		serverRepo:    serverRepo,
+		state:         state,
+		history:       history,
+		notifications: notifications,
 	}
 }
 
@@ -53,7 +55,11 @@ func (s *agentService) IngestPush(ctx context.Context, server models.Server, pus
 		}
 	}
 
-	// 2. Heartbeat + status.
+	// 2. Heartbeat + status. A push from a server previously marked down
+	//    is a recovery worth notifying.
+	if server.Status == models.ServerStatusDown {
+		emitServerTransition(ctx, s.notifications, server, models.ServerStatusOnline)
+	}
 	if err := s.serverRepo.TouchSeen(ctx, server.ID, models.ServerStatusOnline); err != nil {
 		log.Printf("agent: touch seen failed for %s: %v", serverID, err)
 	}
@@ -77,10 +83,17 @@ func (s *agentService) IngestPush(ctx context.Context, server models.Server, pus
 			services[i].Ts = now
 		}
 
+		// Compare against the previous state so provider/service outages
+		// and recoveries raise notifications for remote servers too.
+		prev, _ := s.state.GetProviderState(ctx, serverID, providerName)
+
 		if err := s.state.RecordProviderState(ctx, serverID, providerName, payload.Available, services); err != nil {
 			log.Printf("agent: provider %s state write failed for %s: %v", providerName, serverID, err)
 			continue
 		}
+
+		emitProviderTransition(ctx, s.notifications, serverID, providerName, prev, payload.Available)
+		emitServiceTransitions(ctx, s.notifications, serverID, providerName, prev, services)
 
 		// Best-effort history insert. Snapshot shape is already canonical
 		// so no provider-specific conversion is needed.

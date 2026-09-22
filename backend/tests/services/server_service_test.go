@@ -3,8 +3,10 @@ package services_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"server-monitoring/internal/dtos"
+	"server-monitoring/internal/models"
 	"server-monitoring/internal/services"
 	apperrors "server-monitoring/pkg/errors"
 	setup_test "server-monitoring/tests/setup"
@@ -103,5 +105,53 @@ func TestDelete_LocalServerIsProtected(t *testing.T) {
 	err = svc.Delete(context.Background(), local.ID)
 	if err != apperrors.ErrForbidden {
 		t.Fatalf("expected ErrForbidden when deleting local server, got %v", err)
+	}
+}
+
+func TestMarkStaleDown_MarksOnlyStaleAndUnseen(t *testing.T) {
+	repo := newFakeServerRepo()
+	svc := setup_test.NewServerServiceWithRepo(repo)
+
+	old := time.Now().UTC().Add(-2 * time.Hour)
+	fresh := time.Now().UTC()
+	repo.servers = []models.Server{
+		{ID: bson.NewObjectID(), Name: "stale", Status: models.ServerStatusOnline, LastSeen: &old},
+		{ID: bson.NewObjectID(), Name: "fresh", Status: models.ServerStatusOnline, LastSeen: &fresh},
+		{ID: bson.NewObjectID(), Name: "already-down", Status: models.ServerStatusDown, LastSeen: &old},
+		{ID: bson.NewObjectID(), Name: "never-seen", Status: models.ServerStatusUnknown},
+	}
+
+	down, err := svc.MarkStaleDown(context.Background(), time.Minute)
+	if err != nil {
+		t.Fatalf("MarkStaleDown: %v", err)
+	}
+	if len(down) != 2 {
+		t.Fatalf("marked down = %d, want 2", len(down))
+	}
+
+	status := map[string]models.ServerStatus{}
+	for _, s := range repo.servers {
+		status[s.Name] = s.Status
+	}
+	if status["stale"] != models.ServerStatusDown {
+		t.Fatalf("stale status = %q, want down", status["stale"])
+	}
+	if status["never-seen"] != models.ServerStatusDown {
+		t.Fatalf("never-seen status = %q, want down", status["never-seen"])
+	}
+	if status["fresh"] != models.ServerStatusOnline {
+		t.Fatalf("fresh status = %q, want online", status["fresh"])
+	}
+	if status["already-down"] != models.ServerStatusDown {
+		t.Fatalf("already-down status = %q", status["already-down"])
+	}
+
+	// Idempotent: a second sweep finds nothing new.
+	again, err := svc.MarkStaleDown(context.Background(), time.Minute)
+	if err != nil {
+		t.Fatalf("second MarkStaleDown: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("second sweep marked %d, want 0", len(again))
 	}
 }

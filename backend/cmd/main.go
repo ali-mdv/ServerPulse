@@ -42,6 +42,7 @@ func main() {
 		repository.NewServerRepository(db),
 		stateService,
 		historyService,
+		notificationService,
 	)
 
 	// Ensure the local host exists as a server record so the in-process

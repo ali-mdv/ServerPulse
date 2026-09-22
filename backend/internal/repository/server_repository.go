@@ -20,7 +20,9 @@ type ServerRepository interface {
 	FindByName(ctx context.Context, name string) (*models.Server, error)
 	FindByAgentToken(ctx context.Context, token string) (*models.Server, error)
 	List(ctx context.Context) ([]models.Server, error)
+	ListStale(ctx context.Context, before time.Time) ([]models.Server, error)
 	UpdateByID(ctx context.Context, id bson.ObjectID, update bson.D) (*models.Server, error)
+	SetStatus(ctx context.Context, id bson.ObjectID, status models.ServerStatus) error
 	DeleteByID(ctx context.Context, id bson.ObjectID) error
 	TouchSeen(ctx context.Context, id bson.ObjectID, status models.ServerStatus) error
 }
@@ -133,6 +135,48 @@ func (r *serverRepository) TouchSeen(ctx context.Context, id bson.ObjectID, stat
 	}}
 	if _, err := r.Collection.UpdateOne(ctx, idFilter(id), update); err != nil {
 		return fmt.Errorf("touch server: %w", err)
+	}
+	return nil
+}
+
+// ListStale returns every server whose heartbeat is missing or older
+// than `before` and that isn't already marked down. `_id` is still the
+// ObjectID form, so callers can pass it straight to SetStatus.
+func (r *serverRepository) ListStale(ctx context.Context, before time.Time) ([]models.Server, error) {
+	filter := bson.D{
+		{Key: "status", Value: bson.D{{Key: "$ne", Value: models.ServerStatusDown}}},
+		{Key: "$or", Value: bson.A{
+			bson.D{{Key: "lastSeen", Value: bson.D{{Key: "$exists", Value: false}}}},
+			bson.D{{Key: "lastSeen", Value: nil}},
+			bson.D{{Key: "lastSeen", Value: bson.D{{Key: "$lt", Value: before}}}},
+		}},
+	}
+
+	cursor, err := r.Collection.Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("list stale servers: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var out []models.Server
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, fmt.Errorf("decode stale servers: %w", err)
+	}
+	return out, nil
+}
+
+// SetStatus flips only the status (and updatedAt), leaving LastSeen
+// untouched so the downtime window stays measurable.
+func (r *serverRepository) SetStatus(ctx context.Context, id bson.ObjectID, status models.ServerStatus) error {
+	update := bson.D{{
+		Key: "$set",
+		Value: bson.D{
+			{Key: "status", Value: status},
+			{Key: "updatedAt", Value: time.Now().UTC()},
+		},
+	}}
+	if _, err := r.Collection.UpdateOne(ctx, idFilter(id), update); err != nil {
+		return fmt.Errorf("set server status: %w", err)
 	}
 	return nil
 }

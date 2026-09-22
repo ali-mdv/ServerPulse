@@ -31,6 +31,7 @@ type ServerService interface {
 	Delete(ctx context.Context, id bson.ObjectID) error
 	GenerateAgentToken(ctx context.Context, id bson.ObjectID) (*models.Server, string, error)
 	TouchSeen(ctx context.Context, id bson.ObjectID, status models.ServerStatus) error
+	MarkStaleDown(ctx context.Context, staleAfter time.Duration) ([]models.Server, error)
 	ResolveByAgentToken(ctx context.Context, token string) (*models.Server, error)
 	EnsureLocalServer(ctx context.Context) (*models.Server, error)
 }
@@ -178,6 +179,31 @@ func (s *serverService) GenerateAgentToken(ctx context.Context, id bson.ObjectID
 
 func (s *serverService) TouchSeen(ctx context.Context, id bson.ObjectID, status models.ServerStatus) error {
 	return s.repo.TouchSeen(ctx, id, status)
+}
+
+// MarkStaleDown flips every server whose last heartbeat is older than
+// staleAfter to "down" and returns the ones that changed, so the caller
+// can raise a notification per transition. Servers already down are
+// skipped, making the operation idempotent.
+func (s *serverService) MarkStaleDown(ctx context.Context, staleAfter time.Duration) ([]models.Server, error) {
+	if staleAfter <= 0 {
+		return nil, nil
+	}
+
+	stale, err := s.repo.ListStale(ctx, time.Now().UTC().Add(-staleAfter))
+	if err != nil {
+		return nil, err
+	}
+
+	down := make([]models.Server, 0, len(stale))
+	for _, srv := range stale {
+		if err := s.repo.SetStatus(ctx, srv.ID, models.ServerStatusDown); err != nil {
+			return nil, err
+		}
+		srv.Status = models.ServerStatusDown
+		down = append(down, srv)
+	}
+	return down, nil
 }
 
 func (s *serverService) ResolveByAgentToken(ctx context.Context, token string) (*models.Server, error) {

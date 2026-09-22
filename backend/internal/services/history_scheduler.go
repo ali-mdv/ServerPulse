@@ -99,6 +99,12 @@ func (s *historyScheduler) tick(ctx context.Context) {
 
 	serverID := s.serverID.Hex()
 
+	// If the local row was previously marked down (e.g. the backend was
+	// offline), notice the recovery before refreshing its heartbeat.
+	if local, err := s.servers.GetByID(tickCtx, s.serverID); err == nil && local != nil && local.Status == models.ServerStatusDown {
+		emitServerTransition(tickCtx, s.notifications, *local, models.ServerStatusOnline)
+	}
+
 	// Heartbeat the local server row so its status/lastSeen reflect the
 	// in-process scheduler activity.
 	if err := s.servers.TouchSeen(tickCtx, s.serverID, models.ServerStatusOnline); err != nil {
@@ -110,7 +116,7 @@ func (s *historyScheduler) tick(ctx context.Context) {
 		log.Printf("history: pm2 list failed: %v", err)
 		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, models.ProviderPM2)
 		_ = s.state.RecordProviderState(tickCtx, serverID, models.ProviderPM2, false, nil)
-		s.emitProviderTransition(tickCtx, serverID, models.ProviderPM2, prevPM2, false)
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderPM2, prevPM2, false)
 	} else {
 		snaps := toSnapshots(serverID, procs)
 		if err := s.history.RecordPM2Snapshot(tickCtx, serverID, procs); err != nil {
@@ -119,8 +125,8 @@ func (s *historyScheduler) tick(ctx context.Context) {
 		if err := s.state.RecordProviderState(tickCtx, serverID, models.ProviderPM2, true, snaps); err != nil {
 			log.Printf("history: pm2 state write failed: %v", err)
 		}
-		s.emitProviderTransition(tickCtx, serverID, models.ProviderPM2, prevPM2, true)
-		s.emitServiceTransitions(tickCtx, serverID, models.ProviderPM2, prevPM2, snaps)
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderPM2, prevPM2, true)
+		emitServiceTransitions(tickCtx, s.notifications, serverID, models.ProviderPM2, prevPM2, snaps)
 	}
 
 	prevDocker, _ := s.state.GetProviderState(tickCtx, serverID, models.ProviderDocker)
@@ -128,7 +134,7 @@ func (s *historyScheduler) tick(ctx context.Context) {
 		log.Printf("history: docker list failed: %v", err)
 		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, models.ProviderDocker)
 		_ = s.state.RecordProviderState(tickCtx, serverID, models.ProviderDocker, false, nil)
-		s.emitProviderTransition(tickCtx, serverID, models.ProviderDocker, prevDocker, false)
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderDocker, prevDocker, false)
 	} else {
 		snaps := toDockerSnapshots(serverID, containers)
 		if err := s.history.RecordDockerSnapshot(tickCtx, serverID, containers); err != nil {
@@ -137,8 +143,8 @@ func (s *historyScheduler) tick(ctx context.Context) {
 		if err := s.state.RecordProviderState(tickCtx, serverID, models.ProviderDocker, true, snaps); err != nil {
 			log.Printf("history: docker state write failed: %v", err)
 		}
-		s.emitProviderTransition(tickCtx, serverID, models.ProviderDocker, prevDocker, true)
-		s.emitServiceTransitions(tickCtx, serverID, models.ProviderDocker, prevDocker, snaps)
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderDocker, prevDocker, true)
+		emitServiceTransitions(tickCtx, s.notifications, serverID, models.ProviderDocker, prevDocker, snaps)
 	}
 
 	usage := s.system.SystemUsage()
@@ -148,91 +154,17 @@ func (s *historyScheduler) tick(ctx context.Context) {
 	if err := s.state.RecordServerUsage(tickCtx, serverID, usage); err != nil {
 		log.Printf("history: server usage write failed: %v", err)
 	}
-}
 
-// emitProviderTransition raises a notification when a provider's
-// availability flips between ticks. The first observation (prev == nil)
-// is treated as a baseline and stays silent.
-func (s *historyScheduler) emitProviderTransition(ctx context.Context, serverID, provider string, prev *models.ProviderState, available bool) {
-	if s.notifications == nil || prev == nil || prev.Available == available {
-		return
-	}
-
-	n := models.Notification{
-		ServerID: serverID,
-		Meta:     map[string]any{"provider": provider},
-	}
-	if available {
-		n.Type = models.NotificationTypeProviderAvailable
-		n.Severity = models.NotificationSeverityInfo
-		n.Title = fmt.Sprintf("%s is back online", providerLabel(provider))
-		n.Message = fmt.Sprintf("The %s daemon on this server is reachable again.", provider)
+	// Mark servers that stopped reporting as down and notify once per
+	// transition. A tolerance factor is applied to the poll interval so a
+	// single missed heartbeat doesn't cause down/online flapping. Runs
+	// after the local heartbeat so the local server is never stale.
+	if down, err := s.servers.MarkStaleDown(tickCtx, StaleAfter(s.pollInterval(tickCtx))); err != nil {
+		log.Printf("history: stale server sweep failed: %v", err)
 	} else {
-		n.Type = models.NotificationTypeProviderUnavailable
-		n.Severity = models.NotificationSeverityCritical
-		n.Title = fmt.Sprintf("%s is unavailable", providerLabel(provider))
-		n.Message = fmt.Sprintf("The %s daemon on this server could not be reached.", provider)
-	}
-
-	if _, err := s.notifications.Notify(ctx, n); err != nil {
-		log.Printf("notifications: provider transition failed: %v", err)
-	}
-}
-
-// emitServiceTransitions raises a notification for every managed service
-// whose running state changed since the previous tick. Only runs while
-// the provider itself is available, so a dead daemon produces one
-// provider alert instead of one per service.
-func (s *historyScheduler) emitServiceTransitions(ctx context.Context, serverID, provider string, prev *models.ProviderState, current []models.ServiceSnapshot) {
-	if s.notifications == nil || prev == nil || !prev.Available {
-		return
-	}
-
-	before := make(map[string]models.ServiceSnapshot, len(prev.Services))
-	for _, svc := range prev.Services {
-		before[svc.Meta.ServiceID] = svc
-	}
-
-	for _, svc := range current {
-		old, ok := before[svc.Meta.ServiceID]
-		if !ok || old.Available == svc.Available {
-			continue
+		for _, srv := range down {
+			emitServerTransition(tickCtx, s.notifications, srv, models.ServerStatusDown)
 		}
-
-		n := models.Notification{
-			ServerID: serverID,
-			Meta: map[string]any{
-				"provider":  provider,
-				"serviceId": svc.Meta.ServiceID,
-				"name":      svc.Meta.Name,
-			},
-		}
-		if svc.Available {
-			n.Type = models.NotificationTypeServiceUp
-			n.Severity = models.NotificationSeverityInfo
-			n.Title = fmt.Sprintf("%s is back up", svc.Meta.Name)
-			n.Message = fmt.Sprintf("%s on %s is running again.", svc.Meta.Name, provider)
-		} else {
-			n.Type = models.NotificationTypeServiceDown
-			n.Severity = models.NotificationSeverityCritical
-			n.Title = fmt.Sprintf("%s is down", svc.Meta.Name)
-			n.Message = fmt.Sprintf("%s (%s) on %s is not running.", svc.Meta.Name, svc.Status, provider)
-		}
-
-		if _, err := s.notifications.Notify(ctx, n); err != nil {
-			log.Printf("notifications: service transition failed: %v", err)
-		}
-	}
-}
-
-func providerLabel(provider string) string {
-	switch provider {
-	case models.ProviderPM2:
-		return "PM2"
-	case models.ProviderDocker:
-		return "Docker"
-	default:
-		return provider
 	}
 }
 
