@@ -7,44 +7,18 @@ import (
 	"server-monitoring/internal/models"
 	"server-monitoring/internal/services"
 	"server-monitoring/internal/utils"
-	"server-monitoring/pkg/config"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type NotificationHandler struct {
-	service  services.NotificationService
-	servers  services.ServerService
-	upgrader websocket.Upgrader
+	service services.NotificationService
+	servers services.ServerService
 }
 
 func NewNotificationHandler(service services.NotificationService, servers services.ServerService) *NotificationHandler {
-	return &NotificationHandler{
-		service: service,
-		servers: servers,
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin:     checkWebSocketOrigin,
-		},
-	}
-}
-
-// ServeWS upgrades the request and registers the connection with the
-// notification hub. Auth is enforced by WSAuthMiddleware before the
-// upgrade happens.
-func (h *NotificationHandler) ServeWS(c *gin.Context) {
-	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		// Upgrade already wrote the HTTP error response.
-		return
-	}
-
-	client := services.NewNotificationClient(conn, h.service.Hub())
-	h.service.Hub().Register(client)
-	client.Run()
+	return &NotificationHandler{service: service, servers: servers}
 }
 
 // List returns notifications newest-first, optionally filtered by
@@ -121,24 +95,4 @@ func (h *NotificationHandler) optionalServerID(c *gin.Context) string {
 		return utils.ServerIDFromQuery(c, h.servers)
 	}
 	return id
-}
-
-// checkWebSocketOrigin mirrors the CORS config: wildcard (or no
-// configured origins) allows everything, otherwise the Origin header
-// must match. Non-browser clients with no Origin are allowed.
-func checkWebSocketOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-	cfg := config.Cfg
-	if cfg == nil || len(cfg.Origins) == 0 {
-		return true
-	}
-	for _, allowed := range cfg.Origins {
-		if allowed == "*" || allowed == origin {
-			return true
-		}
-	}
-	return false
 }

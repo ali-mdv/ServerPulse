@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"server-monitoring/internal/models"
@@ -32,26 +33,27 @@ type NotificationService interface {
 	MarkAllRead(ctx context.Context, serverID string) (int64, error)
 	UnreadCount(ctx context.Context, serverID string) (int64, error)
 	EnsureSchema(ctx context.Context) error
-	Hub() NotificationHub
+	Handler() http.Handler
+	Close()
 }
 
 type notificationService struct {
-	repo repository.NotificationRepository
-	hub  NotificationHub
+	repo   repository.NotificationRepository
+	socket *notificationServer
 }
 
 func NewNotificationService(dbName string) NotificationService {
 	db := database.GetDatabase(dbName)
 	return &notificationService{
-		repo: repository.NewNotificationRepository(db),
-		hub:  NewNotificationHub(),
+		repo:   repository.NewNotificationRepository(db),
+		socket: newNotificationServer(),
 	}
 }
 
 // NewNotificationServiceFromRepo is the repo-backed constructor used by
 // the test/setup helpers. Not part of the stable API.
 func NewNotificationServiceFromRepo(repo repository.NotificationRepository) NotificationService {
-	return &notificationService{repo: repo, hub: NewNotificationHub()}
+	return &notificationService{repo: repo, socket: newNotificationServer()}
 }
 
 // Notify persists the notification then pushes it to every connected
@@ -69,7 +71,7 @@ func (s *notificationService) Notify(ctx context.Context, n models.Notification)
 	err := s.repo.Insert(ctx, n)
 	// Broadcast even if persistence failed: a live socket is exactly
 	// when a monitoring alert matters most.
-	s.hub.Broadcast(n)
+	s.socket.Broadcast(n)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +107,11 @@ func (s *notificationService) EnsureSchema(ctx context.Context) error {
 	return s.repo.EnsureIndexes(ctx)
 }
 
-func (s *notificationService) Hub() NotificationHub {
-	return s.hub
+// Handler exposes the Socket.IO HTTP handler so the router can mount it.
+func (s *notificationService) Handler() http.Handler {
+	return s.socket.Handler()
+}
+
+func (s *notificationService) Close() {
+	s.socket.Close()
 }

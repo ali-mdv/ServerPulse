@@ -21,7 +21,8 @@ func RegisterNotificationRoutes(r *gin.RouterGroup, notifications services.Notif
 		api.POST("/:notificationId/read", handler.MarkRead)
 	}
 
-	// Browsers can't set the Authorization header on a WebSocket
-	// handshake, so this route authenticates via ?token= instead.
-	r.GET("/notifications/ws", middlewares.WSAuthMiddleware(), handler.ServeWS)
+	// Socket.IO endpoint. Engine.IO's handshake authenticates via the
+	// socket `auth` payload / `token` query, so it bypasses the header
+	// auth used by the REST routes above.
+	r.Any("/notifications/socket.io/*any", gin.WrapH(notifications.Handler()))
 }

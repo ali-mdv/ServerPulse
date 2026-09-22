@@ -2,6 +2,8 @@ package services_test
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,9 +12,7 @@ import (
 
 	"server-monitoring/internal/models"
 	"server-monitoring/internal/services"
-
-	"github.com/gorilla/websocket"
-	"go.mongodb.org/mongo-driver/v2/bson"
+	jwtutil "server-monitoring/pkg/jwt"
 )
 
 func TestNotificationService_NotifyPersistsWithDefaults(t *testing.T) {
@@ -125,49 +125,96 @@ func TestNotificationService_MarkReadAndCount(t *testing.T) {
 	}
 }
 
-func TestNotificationHub_BroadcastsToConnectedClient(t *testing.T) {
-	hub := services.NewNotificationHub()
-	defer hub.Close()
+// TestNotificationSocket_HandshakeAuthAndBroadcast drives the raw
+// Engine.IO polling protocol end-to-end: handshake, authenticated
+// Socket.IO connect, then a broadcast the client reads back. This is the
+// Go-side equivalent of what socket.io-client does in the browser.
+func TestNotificationSocket_HandshakeAuthAndBroadcast(t *testing.T) {
+	repo := &fakeNotificationRepo{}
+	svc := services.NewNotificationServiceFromRepo(repo)
+	defer svc.Close()
 
-	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		client := services.NewNotificationClient(conn, hub)
-		hub.Register(client)
-		client.Run()
-	}))
+	mux := http.NewServeMux()
+	mux.Handle(services.NotificationSocketPath+"/", svc.Handler())
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	url := "ws" + strings.TrimPrefix(srv.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	base := srv.URL + services.NotificationSocketPath + "/"
+	client := srv.Client()
+
+	// 1. Engine.IO handshake.
+	resp, err := client.Get(base + "?EIO=4&transport=polling")
 	if err != nil {
-		t.Fatalf("dial: %v", err)
+		t.Fatalf("handshake: %v", err)
 	}
-	defer conn.Close()
+	body := readBody(t, resp)
+	sid := parseSID(t, body)
 
-	// Register happens in the handler goroutine; give it a beat to land
-	// in the hub's client set before broadcasting.
+	// 2. Socket.IO CONNECT carrying the JWT in the auth payload, exactly
+	// like socket.io-client's `auth: { token }` option.
+	token, err := jwtutil.GenerateToken("test-user")
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	connectURL := base + "?EIO=4&transport=polling&sid=" + sid
+	connectPayload := `40{"token":"` + token + `"}`
+	resp, err = client.Post(connectURL, "text/plain", strings.NewReader(connectPayload))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	readBody(t, resp)
+
+	// 3. Broadcast and read the event back from the polling stream.
 	time.Sleep(50 * time.Millisecond)
-
-	hub.Broadcast(models.Notification{
-		ID:       bson.NewObjectID(),
+	if _, err := svc.Notify(context.Background(), models.Notification{
 		ServerID: "s1",
 		Severity: models.NotificationSeverityInfo,
 		Title:    "hello socket",
-	})
+	}); err != nil {
+		t.Fatalf("Notify: %v", err)
+	}
 
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	_, msg, err := conn.ReadMessage()
+	resp, err = client.Get(connectURL)
 	if err != nil {
-		t.Fatalf("read: %v", err)
+		t.Fatalf("poll: %v", err)
 	}
-	if !strings.Contains(string(msg), "hello socket") {
-		t.Fatalf("payload %q missing notification title", msg)
+	msg := readBody(t, resp)
+	if !strings.Contains(msg, "hello socket") {
+		t.Fatalf("poll payload %q missing notification title", msg)
 	}
-	if !strings.Contains(string(msg), `"type":"notification"`) {
-		t.Fatalf("payload %q missing envelope type", msg)
+	if !strings.Contains(msg, "notification") {
+		t.Fatalf("poll payload %q missing event name", msg)
 	}
+}
+
+func readBody(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d: %s", resp.StatusCode, raw)
+	}
+	return string(raw)
+}
+
+func parseSID(t *testing.T, body string) string {
+	t.Helper()
+	// Engine.IO open packet: 0{"sid":"...","upgrades":[...],...}
+	idx := strings.Index(body, "{")
+	if idx < 0 {
+		t.Fatalf("handshake payload %q missing JSON", body)
+	}
+	var payload struct {
+		SID string `json:"sid"`
+	}
+	if err := json.Unmarshal([]byte(body[idx:]), &payload); err != nil {
+		t.Fatalf("decode handshake %q: %v", body, err)
+	}
+	if payload.SID == "" {
+		t.Fatalf("handshake %q missing sid", body)
+	}
+	return payload.SID
 }
