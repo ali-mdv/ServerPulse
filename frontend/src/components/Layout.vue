@@ -51,6 +51,8 @@
 import { ref, computed, watch, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { useMediaQuery, useNotificationsPanel } from "@/composables";
+import { useAuthStore } from "@/stores/auth";
+import { useNotificationsStore } from "@/stores/notifications";
 import { useScrollLock } from "@vueuse/core";
 import Sidebar from "./Sidebar.vue";
 import TopNav from "./TopNav.vue";
@@ -60,6 +62,8 @@ const collapsed = ref(false);
 const mobileOpen = ref(false);
 const route = useRoute();
 const notifications = useNotificationsPanel();
+const auth = useAuthStore();
+const notificationsStore = useNotificationsStore();
 
 const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -91,6 +95,23 @@ watch(isDesktop, (desktop) => {
 watch(notifications.isOpen, (open) => {
   notificationsScrollLocked.value = open;
 });
+
+// Keep the notification socket alive only while the user is signed in
+// and off the auth pages.
+const shouldConnectSocket = computed(
+  () => auth.isAuthenticated && !isAuthRoute.value,
+);
+
+watch(
+  shouldConnectSocket,
+  (active) => {
+    if (active) notificationsStore.connect();
+    else notificationsStore.disconnect();
+  },
+  { immediate: true },
+);
+
+onUnmounted(() => notificationsStore.disconnect());
 
 function toggleCollapsed() {
   if (isDesktop.value) {
