@@ -103,6 +103,27 @@ func (r *fakeServerRepo) DeleteByID(context.Context, bson.ObjectID) error { retu
 func (r *fakeServerRepo) TouchSeen(context.Context, bson.ObjectID, models.ServerStatus) error {
 	return nil
 }
+func (r *fakeServerRepo) ListStale(_ context.Context, before time.Time) ([]models.Server, error) {
+	var out []models.Server
+	for _, s := range r.servers {
+		if s.Status == models.ServerStatusDown {
+			continue
+		}
+		if s.LastSeen == nil || s.LastSeen.Before(before) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+func (r *fakeServerRepo) SetStatus(_ context.Context, id bson.ObjectID, status models.ServerStatus) error {
+	for i := range r.servers {
+		if r.servers[i].ID == id {
+			r.servers[i].Status = status
+			return nil
+		}
+	}
+	return nil
+}
 
 // fakeUserRepo is the in-memory repository used by services/user_service_test.
 type fakeUserRepo struct {
@@ -230,13 +251,15 @@ func (r *fakeStateRepo) GetServerUsage(_ context.Context, serverID string) (*mod
 
 // fakeHistoryRepo is the in-memory repository used by services/history_service_test.
 type fakeHistoryRepo struct {
-	batches   [][]models.ServiceSnapshot
-	ensured   int
-	tracked   []models.SnapshotMeta
+	batches    [][]models.ServiceSnapshot
+	ensured    int
+	tracked    []models.SnapshotMeta
+	retentions []time.Duration
 }
 
-func (r *fakeHistoryRepo) EnsureCollection(context.Context, time.Duration) error {
+func (r *fakeHistoryRepo) EnsureCollection(_ context.Context, retention time.Duration) error {
 	r.ensured++
+	r.retentions = append(r.retentions, retention)
 	return nil
 }
 func (r *fakeHistoryRepo) InsertBatch(_ context.Context, b []models.ServiceSnapshot) error {
@@ -313,6 +336,12 @@ func (r *fakeAgentRepo) UpdateByID(_ context.Context, id bson.ObjectID, _ bson.D
 	return nil, nil
 }
 func (r *fakeAgentRepo) DeleteByID(context.Context, bson.ObjectID) error { return nil }
+func (r *fakeAgentRepo) ListStale(context.Context, time.Time) ([]models.Server, error) {
+	return nil, nil
+}
+func (r *fakeAgentRepo) SetStatus(context.Context, bson.ObjectID, models.ServerStatus) error {
+	return nil
+}
 func (r *fakeAgentRepo) TouchSeen(_ context.Context, id bson.ObjectID, status models.ServerStatus) error {
 	for i := range r.servers {
 		if r.servers[i].ID == id {
@@ -329,6 +358,7 @@ func (r *fakeAgentRepo) TouchSeen(_ context.Context, id bson.ObjectID, status mo
 type fakeAgentState struct {
 	providerWrites []fakeStateWrite
 	usageWrites    []models.ServerUsageState
+	states         []models.ProviderState
 }
 
 type fakeStateWrite struct {
@@ -342,13 +372,30 @@ func (s *fakeAgentState) RecordProviderState(_ context.Context, serverID, provid
 	s.providerWrites = append(s.providerWrites, fakeStateWrite{
 		ServerID: serverID, Provider: provider, Available: available, Services: snapshots,
 	})
+	for i := range s.states {
+		if s.states[i].ServerID == serverID && s.states[i].Provider == provider {
+			s.states[i] = models.ProviderState{
+				ServerID: serverID, Provider: provider, Available: available, Services: snapshots,
+			}
+			return nil
+		}
+	}
+	s.states = append(s.states, models.ProviderState{
+		ServerID: serverID, Provider: provider, Available: available, Services: snapshots,
+	})
 	return nil
 }
 func (s *fakeAgentState) RecordServerUsage(_ context.Context, serverID string, u models.SystemUsage) error {
 	s.usageWrites = append(s.usageWrites, models.ServerUsageState{ServerID: serverID, Usage: u})
 	return nil
 }
-func (s *fakeAgentState) GetProviderState(context.Context, string, string) (*models.ProviderState, error) {
+func (s *fakeAgentState) GetProviderState(_ context.Context, serverID, provider string) (*models.ProviderState, error) {
+	for i := range s.states {
+		if s.states[i].ServerID == serverID && s.states[i].Provider == provider {
+			state := s.states[i]
+			return &state, nil
+		}
+	}
 	return nil, nil
 }
 func (s *fakeAgentState) GetServerUsage(context.Context, string) (*models.ServerUsageState, error) {
@@ -384,12 +431,113 @@ func (h *fakeAgentHistory) FindSeries(context.Context, string, string, string, t
 	return nil, nil
 }
 
+// fakeNotificationRepo is the in-memory repository used by
+// services/notification_service_test.
+type fakeNotificationRepo struct {
+	items []models.Notification
+}
+
+func (r *fakeNotificationRepo) EnsureIndexes(context.Context) error { return nil }
+
+func (r *fakeNotificationRepo) Insert(_ context.Context, n models.Notification) error {
+	r.items = append(r.items, n)
+	return nil
+}
+
+func (r *fakeNotificationRepo) List(_ context.Context, serverID string, severity models.NotificationSeverity, unreadOnly bool, limit int) ([]models.Notification, error) {
+	out := []models.Notification{}
+	for _, n := range r.items {
+		if serverID != "" && n.ServerID != serverID {
+			continue
+		}
+		if severity != "" && n.Severity != severity {
+			continue
+		}
+		if unreadOnly && n.Read {
+			continue
+		}
+		out = append(out, n)
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (r *fakeNotificationRepo) MarkRead(_ context.Context, id bson.ObjectID) error {
+	for i := range r.items {
+		if r.items[i].ID == id {
+			r.items[i].Read = true
+			return nil
+		}
+	}
+	return mongo.ErrNoDocuments
+}
+
+func (r *fakeNotificationRepo) MarkAllRead(_ context.Context, serverID string) (int64, error) {
+	var updated int64
+	for i := range r.items {
+		if serverID != "" && r.items[i].ServerID != serverID {
+			continue
+		}
+		if !r.items[i].Read {
+			r.items[i].Read = true
+			updated++
+		}
+	}
+	return updated, nil
+}
+
+func (r *fakeNotificationRepo) CountUnread(_ context.Context, serverID string) (int64, error) {
+	var unread int64
+	for i := range r.items {
+		if serverID != "" && r.items[i].ServerID != serverID {
+			continue
+		}
+		if !r.items[i].Read {
+			unread++
+		}
+	}
+	return unread, nil
+}
+
+// fakeSettingsRepo is the in-memory repository used by
+// services/settings_service_test.
+type fakeSettingsRepo struct {
+	settings *models.Settings
+}
+
+func (r *fakeSettingsRepo) Get(context.Context) (*models.Settings, error) {
+	if r.settings == nil {
+		return nil, nil
+	}
+	cp := *r.settings
+	return &cp, nil
+}
+
+func (r *fakeSettingsRepo) Ensure(_ context.Context, defaults models.Settings) (*models.Settings, error) {
+	if r.settings == nil {
+		cp := defaults
+		r.settings = &cp
+	}
+	cp := *r.settings
+	return &cp, nil
+}
+
+func (r *fakeSettingsRepo) Upsert(_ context.Context, settings models.Settings) (*models.Settings, error) {
+	cp := settings
+	r.settings = &cp
+	return &cp, nil
+}
+
 // assert that the test fakes still satisfy the interfaces.
 var (
-	_ repository.ServerRepository  = (*fakeServerRepo)(nil)
-	_ repository.UserRepository   = (*fakeUserRepo)(nil)
-	_ repository.StateRepository  = (*fakeStateRepo)(nil)
-	_ repository.HistoryRepository = (*fakeHistoryRepo)(nil)
+	_ repository.ServerRepository       = (*fakeServerRepo)(nil)
+	_ repository.UserRepository         = (*fakeUserRepo)(nil)
+	_ repository.StateRepository        = (*fakeStateRepo)(nil)
+	_ repository.HistoryRepository      = (*fakeHistoryRepo)(nil)
+	_ repository.NotificationRepository = (*fakeNotificationRepo)(nil)
+	_ repository.SettingsRepository     = (*fakeSettingsRepo)(nil)
 )
 
 // hashForTest returns a bcrypt hash with the cheapest cost so tests stay fast.

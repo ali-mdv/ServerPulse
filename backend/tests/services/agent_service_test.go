@@ -22,7 +22,7 @@ func TestAgentService_IngestPush_StampsServerIDOnSnapshots(t *testing.T) {
 	}
 	state := &fakeAgentState{}
 	history := &fakeAgentHistory{}
-	svc := services.NewAgentService(repo, state, history)
+	svc := services.NewAgentService(repo, state, history, nil)
 
 	server := models.Server{
 		ID:   repo.servers[0].ID,
@@ -119,6 +119,84 @@ func TestAgentService_TouchIdentity_IgnoresEmptyHostPort(t *testing.T) {
 	}
 }
 
+func TestAgentService_IngestPush_EmitsServiceDownNotification(t *testing.T) {
+	serverID := bson.NewObjectID()
+	repo := &fakeAgentRepo{servers: []models.Server{{
+		ID: serverID, Name: "agent-01", Status: models.ServerStatusOnline,
+	}}}
+	state := &fakeAgentState{}
+	history := &fakeAgentHistory{}
+	notifRepo := &fakeNotificationRepo{}
+	notifications := services.NewNotificationServiceFromRepo(notifRepo)
+	defer notifications.Close()
+	svc := services.NewAgentService(repo, state, history, notifications)
+
+	server := models.Server{ID: serverID, Name: "agent-01", Status: models.ServerStatusOnline}
+	online := dtos.AgentPushDTO{
+		Name: "agent-01",
+		Providers: map[string]dtos.AgentProviderDTO{
+			"pm2": {Available: true, Services: []models.ServiceSnapshot{
+				{Meta: models.SnapshotMeta{ServiceID: "0", Name: "api"}, Status: "online", Available: true},
+			}},
+		},
+	}
+
+	// First observation is the baseline: no notification.
+	if err := svc.IngestPush(context.Background(), server, online); err != nil {
+		t.Fatalf("first push: %v", err)
+	}
+	if len(notifRepo.items) != 0 {
+		t.Fatalf("baseline push created %d notifications, want 0", len(notifRepo.items))
+	}
+
+	offline := dtos.AgentPushDTO{
+		Name: "agent-01",
+		Providers: map[string]dtos.AgentProviderDTO{
+			"pm2": {Available: true, Services: []models.ServiceSnapshot{
+				{Meta: models.SnapshotMeta{ServiceID: "0", Name: "api"}, Status: "stopped", Available: false},
+			}},
+		},
+	}
+	if err := svc.IngestPush(context.Background(), server, offline); err != nil {
+		t.Fatalf("second push: %v", err)
+	}
+
+	if len(notifRepo.items) != 1 {
+		t.Fatalf("notifications = %d, want 1", len(notifRepo.items))
+	}
+	if notifRepo.items[0].Type != models.NotificationTypeServiceDown {
+		t.Fatalf("type = %q, want service_down", notifRepo.items[0].Type)
+	}
+	if notifRepo.items[0].ServerID != serverID.Hex() {
+		t.Fatalf("serverID = %q", notifRepo.items[0].ServerID)
+	}
+}
+
+func TestAgentService_IngestPush_EmitsServerUpOnRecovery(t *testing.T) {
+	serverID := bson.NewObjectID()
+	repo := &fakeAgentRepo{servers: []models.Server{{
+		ID: serverID, Name: "agent-01", Status: models.ServerStatusDown,
+	}}}
+	state := &fakeAgentState{}
+	history := &fakeAgentHistory{}
+	notifRepo := &fakeNotificationRepo{}
+	notifications := services.NewNotificationServiceFromRepo(notifRepo)
+	defer notifications.Close()
+	svc := services.NewAgentService(repo, state, history, notifications)
+
+	server := models.Server{ID: serverID, Name: "agent-01", Status: models.ServerStatusDown}
+	if err := svc.IngestPush(context.Background(), server, dtos.AgentPushDTO{Name: "agent-01"}); err != nil {
+		t.Fatalf("IngestPush: %v", err)
+	}
+
+	if len(notifRepo.items) != 1 {
+		t.Fatalf("notifications = %d, want 1", len(notifRepo.items))
+	}
+	if notifRepo.items[0].Type != models.NotificationTypeServerUp {
+		t.Fatalf("type = %q, want server_up", notifRepo.items[0].Type)
+	}
+}
+
 func TestAgentService_IngestPush_UpdatesHeartbeat(t *testing.T) {
 	repo := &fakeAgentRepo{servers: []models.Server{{
 		ID:     bson.NewObjectID(),
@@ -127,7 +205,7 @@ func TestAgentService_IngestPush_UpdatesHeartbeat(t *testing.T) {
 	}}}
 	state := &fakeAgentState{}
 	history := &fakeAgentHistory{}
-	svc := services.NewAgentService(repo, state, history)
+	svc := services.NewAgentService(repo, state, history, nil)
 
 	server := models.Server{ID: repo.servers[0].ID, Name: "agent-01"}
 	if err := svc.IngestPush(context.Background(), server, dtos.AgentPushDTO{

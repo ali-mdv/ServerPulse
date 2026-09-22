@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"server-monitoring/internal/dtos"
 	"server-monitoring/internal/middlewares"
@@ -116,6 +117,9 @@ func (s *fakeServerService) GenerateAgentToken(context.Context, bson.ObjectID) (
 }
 func (s *fakeServerService) TouchSeen(context.Context, bson.ObjectID, models.ServerStatus) error {
 	return nil
+}
+func (s *fakeServerService) MarkStaleDown(context.Context, time.Duration) ([]models.Server, error) {
+	return nil, nil
 }
 func (s *fakeServerService) EnsureLocalServer(context.Context) (*models.Server, error) {
 	return nil, nil

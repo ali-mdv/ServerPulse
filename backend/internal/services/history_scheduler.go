@@ -16,26 +16,28 @@ type HistoryScheduler interface {
 }
 
 type historyScheduler struct {
-	pm2         PM2Service
-	docker      DockerService
-	system      SystemService
-	history     HistoryService
-	state       StateService
-	servers     ServerService
-	interval    time.Duration
-	serverID    bson.ObjectID
+	pm2           PM2Service
+	docker        DockerService
+	system        SystemService
+	history       HistoryService
+	state         StateService
+	servers       ServerService
+	notifications NotificationService
+	settings      SettingsService
+	serverID      bson.ObjectID
 }
 
-func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemService, history HistoryService, state StateService, servers ServerService, interval time.Duration, serverID bson.ObjectID) HistoryScheduler {
+func NewHistoryScheduler(pm2 PM2Service, docker DockerService, system SystemService, history HistoryService, state StateService, servers ServerService, notifications NotificationService, settings SettingsService, serverID bson.ObjectID) HistoryScheduler {
 	return &historyScheduler{
-		pm2:      pm2,
-		docker:   docker,
-		system:   system,
-		history:  history,
-		state:    state,
-		servers:  servers,
-		interval: interval,
-		serverID: serverID,
+		pm2:           pm2,
+		docker:        docker,
+		system:        system,
+		history:       history,
+		state:         state,
+		servers:       servers,
+		notifications: notifications,
+		settings:      settings,
+		serverID:      serverID,
 	}
 }
 
@@ -49,24 +51,59 @@ func (s *historyScheduler) Start(ctx context.Context) {
 	go s.run(ctx)
 }
 
+// run polls on the DB-configured interval, re-read every cycle so a
+// settings change takes effect without a restart. It also re-applies the
+// history schema whenever the retention setting changes.
 func (s *historyScheduler) run(ctx context.Context) {
-	ticker := time.NewTicker(s.interval)
-	defer ticker.Stop()
+	appliedRetention := s.retention(ctx)
 	for {
+		timer := time.NewTimer(s.pollInterval(ctx))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			s.tick(ctx)
+			if retention := s.retention(ctx); retention != appliedRetention {
+				if err := s.history.EnsureSchema(ctx); err != nil {
+					log.Printf("history: re-apply schema failed: %v", err)
+				} else {
+					appliedRetention = retention
+				}
+			}
 		}
 	}
 }
 
+func (s *historyScheduler) pollInterval(ctx context.Context) time.Duration {
+	if s.settings != nil {
+		if interval, err := s.settings.HistoryPollInterval(ctx); err == nil && interval > 0 {
+			return interval
+		}
+	}
+	return models.DefaultHistoryPollInterval
+}
+
+func (s *historyScheduler) retention(ctx context.Context) time.Duration {
+	if s.settings != nil {
+		if retention, err := s.settings.HistoryRetention(ctx); err == nil && retention > 0 {
+			return retention
+		}
+	}
+	return models.DefaultHistoryRetention
+}
+
 func (s *historyScheduler) tick(ctx context.Context) {
-	tickCtx, cancel := context.WithTimeout(ctx, s.interval)
+	tickCtx, cancel := context.WithTimeout(ctx, s.pollInterval(ctx))
 	defer cancel()
 
 	serverID := s.serverID.Hex()
+
+	// If the local row was previously marked down (e.g. the backend was
+	// offline), notice the recovery before refreshing its heartbeat.
+	if local, err := s.servers.GetByID(tickCtx, s.serverID); err == nil && local != nil && local.Status == models.ServerStatusDown {
+		emitServerTransition(tickCtx, s.notifications, *local, models.ServerStatusOnline)
+	}
 
 	// Heartbeat the local server row so its status/lastSeen reflect the
 	// in-process scheduler activity.
@@ -74,30 +111,40 @@ func (s *historyScheduler) tick(ctx context.Context) {
 		log.Printf("history: local heartbeat failed: %v", err)
 	}
 
+	prevPM2, _ := s.state.GetProviderState(tickCtx, serverID, models.ProviderPM2)
 	if procs, err := s.pm2.List(); err != nil {
 		log.Printf("history: pm2 list failed: %v", err)
-		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, "pm2")
-		_ = s.state.RecordProviderState(tickCtx, serverID, "pm2", false, nil)
+		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, models.ProviderPM2)
+		_ = s.state.RecordProviderState(tickCtx, serverID, models.ProviderPM2, false, nil)
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderPM2, prevPM2, false)
 	} else {
+		snaps := toSnapshots(serverID, procs)
 		if err := s.history.RecordPM2Snapshot(tickCtx, serverID, procs); err != nil {
 			log.Printf("history: pm2 snapshot write failed: %v", err)
 		}
-		if err := s.state.RecordProviderState(tickCtx, serverID, "pm2", true, toSnapshots(serverID, procs)); err != nil {
+		if err := s.state.RecordProviderState(tickCtx, serverID, models.ProviderPM2, true, snaps); err != nil {
 			log.Printf("history: pm2 state write failed: %v", err)
 		}
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderPM2, prevPM2, true)
+		emitServiceTransitions(tickCtx, s.notifications, serverID, models.ProviderPM2, prevPM2, snaps)
 	}
 
+	prevDocker, _ := s.state.GetProviderState(tickCtx, serverID, models.ProviderDocker)
 	if containers, err := s.docker.ContainersList(true); err != nil {
 		log.Printf("history: docker list failed: %v", err)
-		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, "docker")
-		_ = s.state.RecordProviderState(tickCtx, serverID, "docker", false, nil)
+		_ = s.history.RecordProviderUnavailable(tickCtx, serverID, models.ProviderDocker)
+		_ = s.state.RecordProviderState(tickCtx, serverID, models.ProviderDocker, false, nil)
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderDocker, prevDocker, false)
 	} else {
+		snaps := toDockerSnapshots(serverID, containers)
 		if err := s.history.RecordDockerSnapshot(tickCtx, serverID, containers); err != nil {
 			log.Printf("history: docker snapshot write failed: %v", err)
 		}
-		if err := s.state.RecordProviderState(tickCtx, serverID, "docker", true, toDockerSnapshots(serverID, containers)); err != nil {
+		if err := s.state.RecordProviderState(tickCtx, serverID, models.ProviderDocker, true, snaps); err != nil {
 			log.Printf("history: docker state write failed: %v", err)
 		}
+		emitProviderTransition(tickCtx, s.notifications, serverID, models.ProviderDocker, prevDocker, true)
+		emitServiceTransitions(tickCtx, s.notifications, serverID, models.ProviderDocker, prevDocker, snaps)
 	}
 
 	usage := s.system.SystemUsage()
@@ -106,6 +153,18 @@ func (s *historyScheduler) tick(ctx context.Context) {
 	}
 	if err := s.state.RecordServerUsage(tickCtx, serverID, usage); err != nil {
 		log.Printf("history: server usage write failed: %v", err)
+	}
+
+	// Mark servers that stopped reporting as down and notify once per
+	// transition. A tolerance factor is applied to the poll interval so a
+	// single missed heartbeat doesn't cause down/online flapping. Runs
+	// after the local heartbeat so the local server is never stale.
+	if down, err := s.servers.MarkStaleDown(tickCtx, StaleAfter(s.pollInterval(tickCtx))); err != nil {
+		log.Printf("history: stale server sweep failed: %v", err)
+	} else {
+		for _, srv := range down {
+			emitServerTransition(tickCtx, s.notifications, srv, models.ServerStatusDown)
+		}
 	}
 }
 

@@ -21,8 +21,15 @@
       <Input type="date" v-model="to" aria-label="To date" class="w-auto" />
     </div>
 
+    <div
+      v-if="store.loading && alerts.length === 0"
+      class="flex justify-center py-10"
+    >
+      <Spinner size="lg" />
+    </div>
+
     <EmptyState
-      v-if="filtered.length === 0"
+      v-else-if="filtered.length === 0"
       title="No alerts"
       description="Nothing matches the current filters."
     />
@@ -62,7 +69,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Check } from "lucide-vue-next";
 import Card from "@/components/Card.vue";
 import Badge from "@/components/ui/Badge.vue";
@@ -71,44 +78,62 @@ import Input from "@/components/ui/Input.vue";
 import Select from "@/components/ui/Select.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import PageHeader from "@/components/ui/PageHeader.vue";
+import Spinner from "@/components/ui/Spinner.vue";
+import { useNotificationsStore } from "@/stores/notifications";
+
+const store = useNotificationsStore();
 
 const severity = ref("all");
 const from = ref("");
 const to = ref("");
 
-const alerts = ref([
-  {
-    id: "a1",
-    title: "High CPU on web-01",
-    server: "web-01",
-    time: "2025-10-24 10:12",
-    severity: "critical",
-    resolved: false,
-  },
-  {
-    id: "a2",
-    title: "Disk near full on db-01",
-    server: "db-01",
-    time: "2025-10-24 09:50",
-    severity: "warning",
-    resolved: false,
-  },
-  {
-    id: "a3",
-    title: "Container restart on cache-01",
-    server: "cache-01",
-    time: "2025-10-23 22:05",
-    severity: "info",
-    resolved: true,
-  },
-]);
+const alerts = computed(() =>
+  store.items.map((n) => ({
+    id: n.id,
+    title: n.title,
+    server: n.serverId,
+    createdAt: n.createdAt,
+    time: formatDateTime(n.createdAt),
+    severity: n.severity,
+    resolved: n.read,
+  })),
+);
 
-const filtered = computed(() => {
-  return alerts.value.filter((a) => {
+const filtered = computed(() =>
+  alerts.value.filter((a) => {
     if (severity.value !== "all" && a.severity !== severity.value) return false;
+
+    const ts = new Date(a.createdAt).getTime();
+    if (Number.isNaN(ts)) return true;
+    if (from.value && ts < startOfDay(from.value)) return false;
+    if (to.value && ts > endOfDay(to.value)) return false;
     return true;
-  });
+  }),
+);
+
+onMounted(() => {
+  void store.load();
 });
+
+function startOfDay(date: string): number {
+  return new Date(`${date}T00:00:00`).getTime();
+}
+
+function endOfDay(date: string): number {
+  return new Date(`${date}T23:59:59.999`).getTime();
+}
+
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function severityTone(s: string): "critical" | "warning" | "info" | "neutral" {
   if (s === "critical") return "critical";
@@ -117,8 +142,11 @@ function severityTone(s: string): "critical" | "warning" | "info" | "neutral" {
   return "neutral";
 }
 
-function resolve(id: string) {
-  const found = alerts.value.find((a) => a.id === id);
-  if (found) found.resolved = true;
+async function resolve(id: string) {
+  try {
+    await store.markRead(id);
+  } catch {
+    /* error surfaced via store.error */
+  }
 }
 </script>

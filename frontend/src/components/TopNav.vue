@@ -112,10 +112,14 @@ import {
   Menu,
 } from "lucide-vue-next";
 import { useAuthStore } from "@/stores/auth";
+import { useNotificationsStore } from "@/stores/notifications";
+import { useSettingsStore } from "@/stores/settings";
 import { useTheme, useNotificationsPanel } from "@/composables";
 import Button from "@/components/ui/Button.vue";
 
 const auth = useAuthStore();
+const notificationsStore = useNotificationsStore();
+const settingsStore = useSettingsStore();
 const router = useRouter();
 const route = useRoute();
 
@@ -129,15 +133,26 @@ defineEmits<{
   toggleSidebar: [];
 }>();
 
-const { isDark, toggle } = useTheme();
+const { isDark, theme, toggle: toggleTheme } = useTheme();
 const notifications = useNotificationsPanel();
+
+// Toggle locally, then persist the new appearance so it survives reloads
+// and reaches other sessions.
+async function toggle() {
+  toggleTheme();
+  try {
+    await settingsStore.save({ appearance: theme.value });
+  } catch {
+    /* local theme is already applied; keep going even if the save fails */
+  }
+}
 
 const openUser = ref(false);
 const userRef = ref<HTMLElement | null>(null);
 
 onClickOutside(userRef, () => (openUser.value = false));
 
-const unreadCount = computed(() => 2);
+const unreadCount = computed(() => notificationsStore.unreadCount);
 
 const pageTitle = computed(() => {
   const map: Record<string, string> = {

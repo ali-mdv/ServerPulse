@@ -86,6 +86,9 @@ func (s *stubServerSvc) ResolveByAgentToken(context.Context, string) (*models.Se
 	return nil, nil
 }
 func (s *stubServerSvc) EnsureLocalServer(context.Context) (*models.Server, error) { return nil, nil }
+func (s *stubServerSvc) MarkStaleDown(context.Context, time.Duration) ([]models.Server, error) {
+	return nil, nil
+}
 
 // stubStateSvc implements services.StateService for the server handler.
 type stubStateSvc struct {
@@ -133,6 +136,9 @@ func (s *minimalStateServerSvc) ResolveByAgentToken(context.Context, string) (*m
 }
 func (s *minimalStateServerSvc) EnsureLocalServer(context.Context) (*models.Server, error) {
 	return s.local, nil
+}
+func (s *minimalStateServerSvc) MarkStaleDown(context.Context, time.Duration) ([]models.Server, error) {
+	return nil, nil
 }
 
 // stubStateService2 is the variant used by the state handler that
@@ -240,6 +246,9 @@ func (s *minimalHistoryServerSvc) ResolveByAgentToken(context.Context, string) (
 func (s *minimalHistoryServerSvc) EnsureLocalServer(context.Context) (*models.Server, error) {
 	return nil, nil
 }
+func (s *minimalHistoryServerSvc) MarkStaleDown(context.Context, time.Duration) ([]models.Server, error) {
+	return nil, nil
+}
 
 // stubHistoryService implements services.HistoryService.
 type stubHistoryService struct {
@@ -297,6 +306,9 @@ func (s *idleServerSvc) ResolveByAgentToken(context.Context, string) (*models.Se
 }
 func (s *idleServerSvc) EnsureLocalServer(context.Context) (*models.Server, error) {
 	return s.local, nil
+}
+func (s *idleServerSvc) MarkStaleDown(context.Context, time.Duration) ([]models.Server, error) {
+	return nil, nil
 }
 
 // ensure interfaces stay satisfied.

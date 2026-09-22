@@ -5,7 +5,11 @@
       subtitle="Manage your preferences and connections."
     />
 
-    <form @submit.prevent="onSave" novalidate>
+    <div v-if="store.loading && !store.settings" class="flex justify-center py-10">
+      <Spinner size="lg" />
+    </div>
+
+    <form v-else @submit.prevent="onSave" novalidate>
       <div class="space-y-6">
         <Card>
           <h3 class="font-semibold mb-3">Appearance</h3>
@@ -19,7 +23,7 @@
               <input
                 type="radio"
                 :value="opt.value"
-                v-model="themeValue"
+                v-model="appearance"
                 name="theme"
               />
               {{ opt.label }}
@@ -28,70 +32,63 @@
         </Card>
 
         <Card>
-          <h3 class="font-semibold mb-3">Preferences</h3>
-          <div
-            class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-          >
-            <div>
-              <div class="text-sm font-medium">Metrics refresh interval</div>
-              <div class="text-xs text-muted-foreground">
-                How frequently metrics auto-refresh.
-              </div>
-            </div>
-            <Select
-              v-model.number="refreshInterval"
-              aria-label="Refresh interval"
-              class="w-auto"
-            >
-              <option :value="5">5 seconds</option>
-              <option :value="10">10 seconds</option>
-              <option :value="30">30 seconds</option>
-            </Select>
-          </div>
-          <ErrorMessage name="refreshInterval" v-slot="{ message }">
-            <p class="text-xs text-critical mt-2">{{ message }}</p>
-          </ErrorMessage>
-        </Card>
-
-        <Card>
-          <h3 class="font-semibold mb-3">Connections</h3>
+          <h3 class="font-semibold mb-3">History</h3>
           <div class="space-y-4">
-            <div class="space-y-1.5">
-              <label for="ws-endpoint" class="text-sm font-medium">
-                WebSocket endpoint
-              </label>
-              <Input
-                id="ws-endpoint"
-                v-model="wsEndpoint"
-                type="url"
-                :invalid="!!wsEndpointError"
-              />
-              <ErrorMessage name="wsEndpoint" v-slot="{ message }">
-                <p class="text-xs text-critical mt-1">{{ message }}</p>
-              </ErrorMessage>
+            <div
+              class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            >
+              <div>
+                <div class="text-sm font-medium">Poll interval</div>
+                <div class="text-xs text-muted-foreground">
+                  How often PM2, Docker and system metrics are snapshotted.
+                </div>
+              </div>
+              <Select
+                v-model.number="pollSeconds"
+                aria-label="History poll interval"
+                class="w-auto"
+              >
+                <option v-for="s in pollOptions" :key="s" :value="s">
+                  {{ durationLabel(s) }}
+                </option>
+              </Select>
             </div>
-            <div class="space-y-1.5">
-              <label for="api-base" class="text-sm font-medium">
-                REST API base
-              </label>
-              <Input
-                id="api-base"
-                v-model="apiBase"
-                type="url"
-                :invalid="!!apiBaseError"
-              />
-              <ErrorMessage name="apiBase" v-slot="{ message }">
-                <p class="text-xs text-critical mt-1">{{ message }}</p>
-              </ErrorMessage>
+
+            <div
+              class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            >
+              <div>
+                <div class="text-sm font-medium">Retention</div>
+                <div class="text-xs text-muted-foreground">
+                  How long snapshots are kept before they expire.
+                </div>
+              </div>
+              <Select
+                v-model.number="retentionDays"
+                aria-label="History retention"
+                class="w-auto"
+              >
+                <option v-for="d in retentionOptions" :key="d" :value="d">
+                  {{ d }} {{ d === 1 ? "day" : "days" }}
+                </option>
+              </Select>
             </div>
           </div>
+          <p v-if="store.error" class="text-xs text-critical mt-3">
+            {{ store.error }}
+          </p>
         </Card>
 
         <div class="flex gap-3">
-          <Button type="submit" variant="primary" :loading="saving">
-            {{ saving ? "Saving…" : "Save changes" }}
+          <Button type="submit" variant="primary" :loading="store.saving">
+            {{ store.saving ? "Saving…" : "Save changes" }}
           </Button>
-          <Button type="button" variant="outline" @click="reset">
+          <Button
+            type="button"
+            variant="outline"
+            :disabled="store.saving"
+            @click="reset"
+          >
             Reset
           </Button>
         </div>
@@ -101,20 +98,21 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useToast } from "primevue/usetoast";
-import { useForm, useField, ErrorMessage } from "vee-validate";
+import { useForm, useField } from "vee-validate";
 import * as yup from "yup";
 import { useTheme, type Theme } from "@/composables";
+import { useSettingsStore } from "@/stores/settings";
 import Card from "@/components/Card.vue";
 import Button from "@/components/ui/Button.vue";
-import Input from "@/components/ui/Input.vue";
 import Select from "@/components/ui/Select.vue";
+import Spinner from "@/components/ui/Spinner.vue";
 import PageHeader from "@/components/ui/PageHeader.vue";
 
 const toast = useToast();
-const { theme: themeValue, setTheme } = useTheme();
-const saving = ref(false);
+const store = useSettingsStore();
+const { setTheme } = useTheme();
 
 const themeOptions = [
   { value: "system", label: "System" },
@@ -122,83 +120,106 @@ const themeOptions = [
   { value: "dark", label: "Dark" },
 ] as const;
 
+const POLL_PRESETS = [10, 30, 60, 300];
+const RETENTION_PRESETS = [1, 7, 30, 90];
+
 const schema = yup.object({
-  refreshInterval: yup
-    .number()
-    .oneOf([5, 10, 30], "Pick 5, 10 or 30 seconds")
+  appearance: yup
+    .string()
+    .oneOf(["system", "light", "dark"], "Pick system, light or dark")
     .required(),
-  wsEndpoint: yup
-    .string()
-    .trim()
-    .url("Must be a valid URL")
-    .required("WebSocket endpoint is required"),
-  apiBase: yup
-    .string()
-    .trim()
-    .url("Must be a valid URL")
-    .required("REST API base is required"),
+  historyPollIntervalSeconds: yup
+    .number()
+    .min(5, "Must be at least 5 seconds")
+    .max(86400, "Must be at most 24 hours")
+    .required(),
+  historyRetentionDays: yup
+    .number()
+    .min(1, "Must be at least 1 day")
+    .max(365, "Must be at most 365 days")
+    .required(),
 });
 
-const { handleSubmit, errors, setValues } = useForm({
+const { handleSubmit, setValues } = useForm({
   validationSchema: schema,
   initialValues: {
-    refreshInterval: 10,
-    wsEndpoint: "wss://example.com/ws",
-    apiBase: "https://api.example.com",
+    appearance: "system" as Theme,
+    historyPollIntervalSeconds: 30,
+    historyRetentionDays: 7,
   },
 });
 
-const { value: refreshInterval } = useField<number>("refreshInterval");
-const { value: wsEndpoint } = useField<string>("wsEndpoint");
-const { value: apiBase } = useField<string>("apiBase");
+const { value: appearance } = useField<Theme>("appearance");
+const { value: pollSeconds } = useField<number>("historyPollIntervalSeconds");
+const { value: retentionDays } = useField<number>("historyRetentionDays");
 
-const wsEndpointError = computed(() => errors.value.wsEndpoint);
-const apiBaseError = computed(() => errors.value.apiBase);
-
-function loadFromStorage() {
-  if (typeof localStorage === "undefined") return;
-  try {
-    const raw = localStorage.getItem("settings");
-    if (!raw) return;
-    const s = JSON.parse(raw);
-    setValues({
-      refreshInterval: s.refreshInterval ?? 10,
-      wsEndpoint: s.wsEndpoint ?? "wss://example.com/ws",
-      apiBase: s.apiBase ?? "https://api.example.com",
-    });
-  } catch {
-    /* ignore */
+const pollOptions = computed(() => {
+  const options = [...POLL_PRESETS];
+  if (pollSeconds.value && !options.includes(pollSeconds.value)) {
+    options.push(pollSeconds.value);
   }
-}
-
-loadFromStorage();
-
-const onSave = handleSubmit((values) => {
-  saving.value = true;
-  const payload = {
-    theme: themeValue.value as Theme,
-    refreshInterval: values.refreshInterval,
-    wsEndpoint: values.wsEndpoint,
-    apiBase: values.apiBase,
-  };
-  localStorage.setItem("settings", JSON.stringify(payload));
-  setTheme(payload.theme);
-  window.dispatchEvent(new CustomEvent("settings-updated", { detail: payload }));
-  toast.add({
-    severity: "success",
-    summary: "Saved",
-    detail: "Settings saved",
-    life: 3000,
-  });
-  saving.value = false;
+  return options.sort((a, b) => a - b);
 });
 
-function reset() {
-  themeValue.value = "system";
+const retentionOptions = computed(() => {
+  const options = [...RETENTION_PRESETS];
+  if (retentionDays.value && !options.includes(retentionDays.value)) {
+    options.push(retentionDays.value);
+  }
+  return options.sort((a, b) => a - b);
+});
+
+function durationLabel(seconds: number): string {
+  if (seconds >= 60 && seconds % 60 === 0) {
+    const minutes = seconds / 60;
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  }
+  return `${seconds} seconds`;
+}
+
+function applySettingsToForm() {
+  const settings = store.settings;
+  if (!settings) return;
   setValues({
-    refreshInterval: 10,
-    wsEndpoint: "wss://example.com/ws",
-    apiBase: "https://api.example.com",
+    appearance: settings.appearance,
+    historyPollIntervalSeconds: settings.historyPollIntervalSeconds,
+    historyRetentionDays: Math.max(1, Math.round(settings.historyRetentionSeconds / 86400)),
   });
+  setTheme(settings.appearance);
+}
+
+onMounted(async () => {
+  await store.load();
+  applySettingsToForm();
+});
+
+const onSave = handleSubmit(async (values) => {
+  try {
+    await store.save({
+      appearance: values.appearance as Theme,
+      historyPollIntervalSeconds: values.historyPollIntervalSeconds,
+      historyRetentionSeconds: values.historyRetentionDays * 86400,
+    });
+    // Apply immediately; otherwise the new theme only lands on reload.
+    setTheme(values.appearance as Theme);
+    toast.add({
+      severity: "success",
+      summary: "Saved",
+      detail: "Settings saved",
+      life: 3000,
+    });
+  } catch {
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: store.error ?? "Failed to save settings",
+      life: 4000,
+    });
+  }
+});
+
+async function reset() {
+  await store.load();
+  applySettingsToForm();
 }
 </script>

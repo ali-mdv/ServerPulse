@@ -81,7 +81,12 @@
               v-for="alert in filteredAlerts"
               :key="alert.id"
               role="listitem"
-              class="p-4 hover:bg-muted/40 transition-colors"
+              :class="[
+                'p-4 transition-colors',
+                alert.acknowledged
+                  ? 'opacity-60 hover:bg-muted/40'
+                  : 'bg-primary/5 hover:bg-primary/10',
+              ]"
             >
               <div class="flex items-start gap-3">
                 <span
@@ -95,18 +100,36 @@
                 />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-medium truncate">
+                    <span
+                      :class="[
+                        'text-sm truncate',
+                        alert.acknowledged
+                          ? 'font-medium text-muted-foreground'
+                          : 'font-semibold',
+                      ]"
+                    >
                       {{ alert.title }}
                     </span>
                     <Badge :tone="severityTone(alert.severity)">
                       {{ alert.severity }}
                     </Badge>
+                    <span
+                      v-if="!alert.acknowledged"
+                      class="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                    >
+                      <span
+                        class="w-1.5 h-1.5 rounded-full bg-primary"
+                        aria-hidden="true"
+                      />
+                      <span class="sr-only">Unread</span>
+                    </span>
                   </div>
                   <div class="text-xs text-muted-foreground mt-1">
                     {{ alert.server }} • {{ alert.time }}
                   </div>
                   <div class="mt-2 flex items-center gap-2">
                     <Button
+                      v-if="!alert.acknowledged"
                       variant="outline"
                       size="sm"
                       @click="acknowledge(alert.id)"
@@ -114,6 +137,13 @@
                       <Check class="w-3.5 h-3.5" aria-hidden="true" />
                       Acknowledge
                     </Button>
+                    <span
+                      v-else
+                      class="inline-flex items-center gap-1 text-xs text-muted-foreground italic"
+                    >
+                      <Check class="w-3.5 h-3.5" aria-hidden="true" />
+                      Read
+                    </span>
                     <router-link
                       to="/alerts"
                       class="text-xs text-primary hover:underline focus-visible:underline"
@@ -148,52 +178,30 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { Bell, X, Check, CheckCheck } from "lucide-vue-next";
 import { useNotificationsPanel } from "@/composables/useNotificationsPanel";
+import { useNotificationsStore } from "@/stores/notifications";
 import Badge from "@/components/ui/Badge.vue";
 import Button from "@/components/ui/Button.vue";
 import Select from "@/components/ui/Select.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 
 const panel = useNotificationsPanel();
+const store = useNotificationsStore();
 
 const filter = ref<"all" | "critical" | "warning" | "info">("all");
 
-const alerts = ref([
-  {
-    id: "a1",
-    title: "High CPU on web-01",
-    server: "web-01",
-    time: "10:12",
-    severity: "critical",
-    acknowledged: false,
-  },
-  {
-    id: "a2",
-    title: "Disk near full on db-01",
-    server: "db-01",
-    time: "09:50",
-    severity: "warning",
-    acknowledged: false,
-  },
-  {
-    id: "a3",
-    title: "Container restart on cache-01",
-    server: "cache-01",
-    time: "22:05",
-    severity: "info",
-    acknowledged: true,
-  },
-  {
-    id: "a4",
-    title: "Memory pressure on api-01",
-    server: "api-01",
-    time: "08:31",
-    severity: "warning",
-    acknowledged: false,
-  },
-]);
+const alerts = computed(() =>
+  store.items.map((n) => ({
+    id: n.id,
+    title: n.title,
+    server: n.serverId,
+    time: formatTime(n.createdAt),
+    severity: n.severity,
+    acknowledged: n.read,
+  })),
+);
 
 const filteredAlerts = computed(() =>
   filter.value === "all"
@@ -201,11 +209,14 @@ const filteredAlerts = computed(() =>
     : alerts.value.filter((a) => a.severity === filter.value),
 );
 
-const unreadCount = computed(
-  () => alerts.value.filter((a) => !a.acknowledged).length,
-);
-
+const unreadCount = computed(() => store.unreadCount);
 const hasUnread = computed(() => unreadCount.value > 0);
+
+function formatTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 function severityTone(s: string): "critical" | "warning" | "info" | "neutral" {
   if (s === "critical") return "critical";
@@ -214,12 +225,25 @@ function severityTone(s: string): "critical" | "warning" | "info" | "neutral" {
   return "neutral";
 }
 
-function acknowledge(id: string) {
-  const found = alerts.value.find((a) => a.id === id);
-  if (found) found.acknowledged = true;
+async function acknowledge(id: string) {
+  try {
+    await store.markRead(id);
+  } catch {
+    /* error surfaced via store.error */
+  }
 }
 
-function markAllRead() {
-  for (const a of alerts.value) a.acknowledged = true;
+async function markAllRead() {
+  try {
+    await store.markAllRead();
+  } catch {
+    /* error surfaced via store.error */
+  }
 }
+
+// Refresh from the API whenever the panel opens, so a reconnecting tab
+// catches up on anything missed while the socket was down.
+watch(panel.isOpen, (open) => {
+  if (open) void store.load();
+});
 </script>
