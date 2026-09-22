@@ -15,6 +15,7 @@ type Services struct {
 	Servers       services.ServerService
 	Agent         services.AgentService
 	Notifications services.NotificationService
+	Settings      services.SettingsService
 }
 
 func RegisterV1Routes(r *gin.RouterGroup, s *Services) {
@@ -32,5 +33,6 @@ func RegisterV1Routes(r *gin.RouterGroup, s *Services) {
 		RegisterServerRoutes(api, s)
 		RegisterAgentRoutes(api, s)
 		RegisterNotificationRoutes(api, s.Notifications, s.Servers)
+		RegisterSettingsRoutes(api, s.Settings)
 	}
 }
