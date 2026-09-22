@@ -230,13 +230,15 @@ func (r *fakeStateRepo) GetServerUsage(_ context.Context, serverID string) (*mod
 
 // fakeHistoryRepo is the in-memory repository used by services/history_service_test.
 type fakeHistoryRepo struct {
-	batches   [][]models.ServiceSnapshot
-	ensured   int
-	tracked   []models.SnapshotMeta
+	batches    [][]models.ServiceSnapshot
+	ensured    int
+	tracked    []models.SnapshotMeta
+	retentions []time.Duration
 }
 
-func (r *fakeHistoryRepo) EnsureCollection(context.Context, time.Duration) error {
+func (r *fakeHistoryRepo) EnsureCollection(_ context.Context, retention time.Duration) error {
 	r.ensured++
+	r.retentions = append(r.retentions, retention)
 	return nil
 }
 func (r *fakeHistoryRepo) InsertBatch(_ context.Context, b []models.ServiceSnapshot) error {
@@ -454,6 +456,35 @@ func (r *fakeNotificationRepo) CountUnread(_ context.Context, serverID string) (
 	return unread, nil
 }
 
+// fakeSettingsRepo is the in-memory repository used by
+// services/settings_service_test.
+type fakeSettingsRepo struct {
+	settings *models.Settings
+}
+
+func (r *fakeSettingsRepo) Get(context.Context) (*models.Settings, error) {
+	if r.settings == nil {
+		return nil, nil
+	}
+	cp := *r.settings
+	return &cp, nil
+}
+
+func (r *fakeSettingsRepo) Ensure(_ context.Context, defaults models.Settings) (*models.Settings, error) {
+	if r.settings == nil {
+		cp := defaults
+		r.settings = &cp
+	}
+	cp := *r.settings
+	return &cp, nil
+}
+
+func (r *fakeSettingsRepo) Upsert(_ context.Context, settings models.Settings) (*models.Settings, error) {
+	cp := settings
+	r.settings = &cp
+	return &cp, nil
+}
+
 // assert that the test fakes still satisfy the interfaces.
 var (
 	_ repository.ServerRepository       = (*fakeServerRepo)(nil)
@@ -461,6 +492,7 @@ var (
 	_ repository.StateRepository        = (*fakeStateRepo)(nil)
 	_ repository.HistoryRepository      = (*fakeHistoryRepo)(nil)
 	_ repository.NotificationRepository = (*fakeNotificationRepo)(nil)
+	_ repository.SettingsRepository     = (*fakeSettingsRepo)(nil)
 )
 
 // hashForTest returns a bcrypt hash with the cheapest cost so tests stay fast.

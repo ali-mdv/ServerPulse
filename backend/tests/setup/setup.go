@@ -51,6 +51,18 @@ func NewHistoryServiceWithRepo(repo repository.HistoryRepository, retention time
 	return services.NewHistoryServiceFromRepo(repo, retention)
 }
 
+// NewHistoryServiceWithSettings builds a HistoryService that reads its
+// retention from the given settings service.
+func NewHistoryServiceWithSettings(repo repository.HistoryRepository, settings services.SettingsService) services.HistoryService {
+	return services.NewHistoryServiceWithSettings(repo, settings)
+}
+
+// NewSettingsServiceWithRepo builds a SettingsService backed by the given
+// repository.
+func NewSettingsServiceWithRepo(repo repository.SettingsRepository) services.SettingsService {
+	return services.NewSettingsServiceFromRepo(repo)
+}
+
 // ---- PM2 -----------------------------------------------------------------------
 
 // NewPM2ServiceWithDialErr builds a PM2Service that surfaces the given

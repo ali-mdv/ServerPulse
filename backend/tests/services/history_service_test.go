@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"server-monitoring/internal/dtos"
 	"server-monitoring/internal/models"
-	"server-monitoring/internal/services"
 	setup_test "server-monitoring/tests/setup"
 )
 
@@ -150,9 +150,37 @@ func TestInsertHistoryBatch_PassThrough(t *testing.T) {
 	}
 }
 
-func TestNewHistoryService_RejectsZeroRetention(t *testing.T) {
-	if _, err := services.NewHistoryService("ignored", 0); err == nil {
-		t.Fatal("expected error for zero retention")
+func TestEnsureSchema_FallsBackToDefaultRetention(t *testing.T) {
+	repo := &fakeHistoryRepo{}
+	svc := setup_test.NewHistoryServiceWithRepo(repo, 0)
+
+	if err := svc.EnsureSchema(context.Background()); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+	if len(repo.retentions) != 1 || repo.retentions[0] != models.DefaultHistoryRetention {
+		t.Fatalf("retention = %v, want default %v", repo.retentions, models.DefaultHistoryRetention)
+	}
+}
+
+func TestEnsureSchema_UsesSettingsRetention(t *testing.T) {
+	repo := &fakeHistoryRepo{}
+	settingsRepo := &fakeSettingsRepo{}
+	settingsSvc := setup_test.NewSettingsServiceWithRepo(settingsRepo)
+
+	want := 24 * time.Hour
+	retentionSeconds := int64(want.Seconds())
+	if _, err := settingsSvc.Update(context.Background(), dtos.UpdateSettingsDTO{
+		HistoryRetentionSeconds: &retentionSeconds,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	svc := setup_test.NewHistoryServiceWithSettings(repo, settingsSvc)
+	if err := svc.EnsureSchema(context.Background()); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+	if len(repo.retentions) != 1 || repo.retentions[0] != want {
+		t.Fatalf("retention = %v, want %v", repo.retentions, want)
 	}
 }
 
