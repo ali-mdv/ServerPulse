@@ -104,7 +104,7 @@ import Button from "@/components/ui/Button.vue";
 
 const props = defineProps<{
   service: PM2Service;
-  /** Scopes the History link so the detail page queries the right server. */
+  /** Scopes History links and remote control actions. */
   serverId?: string;
 }>();
 
@@ -173,7 +173,7 @@ async function handleAction(action: ServiceAction) {
 
   try {
     if (action === ServiceAction.START) {
-      await systemStore.startPM2Service(props.service);
+      await systemStore.startPM2Service(props.service, props.serverId);
       toast.add({
         severity: "success",
         summary: "Started",
@@ -181,7 +181,7 @@ async function handleAction(action: ServiceAction) {
         life: 3000,
       });
     } else if (action === ServiceAction.STOP) {
-      await systemStore.stopPM2Service(props.service);
+      await systemStore.stopPM2Service(props.service, props.serverId);
       toast.add({
         severity: "success",
         summary: "Stopped",
@@ -189,7 +189,7 @@ async function handleAction(action: ServiceAction) {
         life: 3000,
       });
     } else if (action === ServiceAction.RESTART) {
-      await systemStore.restartPM2Service(props.service);
+      await systemStore.restartPM2Service(props.service, props.serverId);
       toast.add({
         severity: "success",
         summary: "Restarted",
@@ -198,7 +198,10 @@ async function handleAction(action: ServiceAction) {
       });
     } else if (action === ServiceAction.LOGS) {
       logsLoading.value = true;
-      const logs = await systemStore.getPM2ServiceLogs(props.service);
+      const logs = await systemStore.getPM2ServiceLogs(
+        props.service,
+        props.serverId,
+      );
       logsContent.value = logs;
       toast.add({
         severity: "success",

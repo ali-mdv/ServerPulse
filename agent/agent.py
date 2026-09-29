@@ -361,6 +361,16 @@ def main() -> None:
     print(
         f"ServerPulse agent starting: name={name} url={base_url} interval={interval}s")
 
+    # Control channel: receive start/stop/restart/logs from the backend
+    # over Socket.IO. Runs in a daemon thread; push loop continues below.
+    try:
+        from control import run_control_channel
+
+        run_control_channel(base_url, api_key)
+    except ImportError:
+        print("control channel: control.py not found; remote actions disabled",
+              file=sys.stderr)
+
     while True:
         start = time.time()
         try:

@@ -57,6 +57,10 @@ The backend container must reach two host-side daemons. Both are configured via 
 
 If these are wrong or unset, `/pm2/services` and `/docker/containers` return `200 {"available": false}` with empty lists (the dashboard hides the sections), but `pkg/config` only complains about _missing_ `DB_*` / `PORT`, not about `PM2_SOCKET_PATH`, so check the container's startup log for `pm2 service: dial …` to see the real cause. User-initiated actions return the unmasked 503.
 
+### Agent control channel (`/servers/:id/...`)
+
+The Go agent opens a Socket.IO connection to `/api/v1/agents/socket.io` (auth: `AgentToken` in the handshake `auth` payload) and executes start/stop/restart/logs for Docker and PM2 on the remote host. The backend's `AgentHub` emits `agent:command` and waits for the agent's ack (synchronous request/response). Timeouts: 10s for actions, 20s for logs; errors map to 503 (not connected), 504 (timeout), 502 (transport), or the agent's own message (mapped to 404/400/503/500 by `resultToError`). The Python agent implements the same channel when `python-socketio` is installed.
+
 ## What NOT to do
 
 - Don't introduce a top-level `client/` or `server/` directory — the repos were merged into `frontend/` and `backend/` deliberately.

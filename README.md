@@ -142,6 +142,12 @@ If PM2's daemon isn't running, the dial fails fast at startup and the cause is l
 
 ---
 
+## Remote agent control channel
+
+The Go agent opens a Socket.IO connection to `/api/v1/agents/socket.io` (auth: `AgentToken` in the handshake `auth` payload) and executes `start`/`stop`/`restart`/`logs` for Docker and PM2 on the remote host. The backend's `AgentHub` emits `agent:command` and waits for the agent's ack (synchronous request/response). Timeouts: 10s for actions, 20s for logs; errors map to 503 (not connected), 504 (timeout), 502 (transport), or the agent's own message (mapped to 404/400/503/500 by `resultToError`). The Python agent implements the same channel when `python-socketio` is installed.
+
+---
+
 ## Local development
 
 ### Backend
@@ -192,12 +198,18 @@ All routes are mounted under `/api/v1`.
 | `/api/v1/auth`     | login                                    |
 | `/api/v1/users`    | user CRUD                                |
 | `/api/v1/servers`  | server/agent CRUD + API-key generation   |
+| `/api/v1/servers/:id/docker/...` | per-server Docker start/stop/restart/logs |
+| `/api/v1/servers/:id/pm2/...`    | per-server PM2 start/stop/restart/logs    |
 | `/api/v1/docker`   | list containers, start/stop/restart/logs |
 | `/api/v1/pm2`      | list processes, start/stop/restart/logs  |
 | `/api/v1/system`   | per-host CPU / memory / disk / network   |
 | `/api/v1/report`   | aggregated reports                       |
+| `/api/v1/agents/socket.io` | agent control channel (Socket.IO) |
 
 > The frontend's server list/details pages use the real `/api/v1/servers` endpoints.
+> `/servers/:id/docker/*` and `/servers/:id/pm2/*` accept the local server's hex id
+> (or `local`) and short-circuit to the in-process services; any other id is
+> dispatched to that server's agent over Socket.IO (`AgentHub.Execute`).
 
 Authentication: JWT bearer in `Authorization: Bearer <token>` header on protected routes.
 

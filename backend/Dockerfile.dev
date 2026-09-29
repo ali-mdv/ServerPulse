@@ -4,7 +4,7 @@
 # never require an image rebuild -- air recompiles inside the container.
 # Caches are redirected to volume-backed paths because the container runs
 # as HOST_UID (non-root, see docker-compose.yml).
-FROM golang:1.24-alpine
+FROM golang:1.26-alpine
 
 RUN apk add --no-cache git ca-certificates \
     && go install github.com/air-verse/air@v1.61.7

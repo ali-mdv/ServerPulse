@@ -31,6 +31,12 @@ func main() {
 	serverService := services.NewServerService(dbName)
 	notificationService := services.NewNotificationService(dbName)
 
+	// Control channel: agents connect over Socket.IO; user actions for
+	// remote servers are forwarded through the hub and wait for an ack.
+	agentHub := services.NewAgentHub()
+	agentSocket := services.NewAgentSocket(serverService, agentHub)
+	commandService := services.NewCommandService(agentHub, dockerService, pm2Service, serverService)
+
 	// Best-effort index creation for the notification lookup pattern.
 	if err := notificationService.EnsureSchema(context.Background()); err != nil {
 		log.Printf("notifications: ensure schema failed: %v", err)
@@ -68,6 +74,8 @@ func main() {
 		Agent:         agentService,
 		Notifications: notificationService,
 		Settings:      settingsService,
+		Commands:      commandService,
+		AgentSocket:   agentSocket,
 	})
 	srv.Run(fmt.Sprintf(":%d", cfg.Port))
 }
