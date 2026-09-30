@@ -24,6 +24,7 @@ func newUserTestRouter(svc *stubUserService) *gin.Engine {
 	r.GET("/users/:userID", h.GetUserByID)
 	r.POST("/users", h.CreateUser)
 	r.PUT("/users/:userID", h.UpdateUser)
+	r.DELETE("/users/:userID", h.DeleteUser)
 	r.GET("/me", func(c *gin.Context) { c.Set("userID", "stub-id"); c.Next() }, h.GetUserProfile)
 	return r
 }
@@ -87,6 +88,26 @@ func TestUserHandlers_CreateUser_BadJSON(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("code = %d, want 422", w.Code)
+	}
+}
+
+func TestUserHandlers_DeleteUser_Success(t *testing.T) {
+	stub := &stubUserService{}
+	r := newUserTestRouter(stub)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("DELETE", "/users/000000000000000000000000", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("code = %d, want 200; body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUserHandlers_DeleteUser_NotFound(t *testing.T) {
+	stub := &stubUserService{deleteErr: mongo.ErrNoDocuments}
+	r := newUserTestRouter(stub)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("DELETE", "/users/000000000000000000000000", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code = %d, want 404", w.Code)
 	}
 }
 

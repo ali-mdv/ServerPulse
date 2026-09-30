@@ -5,6 +5,7 @@ import axios from "axios";
 const apiMock = vi.hoisted(() => ({
   post: vi.fn(),
   get: vi.fn(),
+  delete: vi.fn(),
 }));
 
 vi.mock("@/plugins/axios", () => ({
@@ -24,6 +25,7 @@ describe("users store", () => {
     localStorageMock();
     apiMock.post.mockReset();
     apiMock.get.mockReset();
+    apiMock.delete.mockReset();
   });
 
   describe("getProfile", () => {
@@ -116,6 +118,30 @@ describe("users store", () => {
       apiMock.post.mockRejectedValue(axiosError(500));
       const users = useUsersStore();
       await expect(users.addUser("a@b.c", "secret")).rejects.toThrow("Failed to create new user");
+    });
+  });
+
+  describe("deleteUser", () => {
+    it("deletes the user", async () => {
+      apiMock.delete.mockResolvedValue({ data: { message: "user deleted" } });
+      const users = useUsersStore();
+      await users.deleteUser("1");
+      expect(apiMock.delete).toHaveBeenCalledWith(
+        "users/1",
+        expect.objectContaining({ headers: expect.objectContaining({ Authorization: expect.any(String) }) }),
+      );
+    });
+
+    it("throws Access denied on 401", async () => {
+      apiMock.delete.mockRejectedValue(axiosError(401));
+      const users = useUsersStore();
+      await expect(users.deleteUser("1")).rejects.toThrow("Access denied");
+    });
+
+    it("throws generic message on other errors", async () => {
+      apiMock.delete.mockRejectedValue(axiosError(500));
+      const users = useUsersStore();
+      await expect(users.deleteUser("1")).rejects.toThrow("Failed to delete user");
     });
   });
 });

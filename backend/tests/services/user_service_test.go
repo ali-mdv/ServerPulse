@@ -1,12 +1,14 @@
 package services_test
 
 import (
+	"errors"
 	"testing"
 
 	"server-monitoring/internal/dtos"
 	apperrors "server-monitoring/pkg/errors"
 	setup_test "server-monitoring/tests/setup"
 
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -89,5 +91,29 @@ func TestFindUserByID_InvalidID(t *testing.T) {
 	svc := setup_test.NewUserServiceWithRepo(newFakeUserRepo())
 	if _, err := svc.FindUserByID("not-an-objectid"); err == nil {
 		t.Fatal("expected error for invalid id")
+	}
+}
+
+func TestDeleteUserByID_RemovesUser(t *testing.T) {
+	svc := setup_test.NewUserServiceWithRepo(newFakeUserRepo())
+
+	user, err := svc.CreateUser(dtos.CreateUserDTO{Email: "gone@y.z", Password: "longenough"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.DeleteUserByID(user.ID.Hex()); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := svc.FindUserByID(user.ID.Hex()); !errors.Is(err, mongo.ErrNoDocuments) {
+		t.Fatalf("expected ErrNoDocuments after delete, got %v", err)
+	}
+}
+
+func TestDeleteUserByID_NotFound(t *testing.T) {
+	svc := setup_test.NewUserServiceWithRepo(newFakeUserRepo())
+	err := svc.DeleteUserByID("000000000000000000000000")
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		t.Fatalf("expected ErrNoDocuments, got %v", err)
 	}
 }

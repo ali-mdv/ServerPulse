@@ -34,6 +34,7 @@ type stubUserService struct {
 	createErr   error
 	updatedUser *models.User
 	updateErr   error
+	deleteErr   error
 }
 
 func (s *stubUserService) UsersList() (*[]models.User, error) { return &s.list, s.listErr }
@@ -47,6 +48,7 @@ func (s *stubUserService) CreateUser(dtos.CreateUserDTO) (*models.User, error) {
 func (s *stubUserService) UpdateUserByID(string, dtos.UpdateUserDTO) (*models.User, error) {
 	return s.updatedUser, s.updateErr
 }
+func (s *stubUserService) DeleteUserByID(string) error { return s.deleteErr }
 func (s *stubUserService) GenerateHash(string) (*string, error) { return nil, nil }
 
 // stubServerSvc implements services.ServerService for handler tests.

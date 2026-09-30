@@ -17,6 +17,7 @@ type UserService interface {
 	FindUserByID(string) (*models.User, error)
 	FindUserByEmail(string) (*models.User, error)
 	UpdateUserByID(string, dtos.UpdateUserDTO) (*models.User, error)
+	DeleteUserByID(string) error
 	GenerateHash(string) (*string, error)
 }
 
@@ -73,6 +74,10 @@ func (s *userService) UpdateUserByID(userID string, dto dtos.UpdateUserDTO) (*mo
 	}
 
 	return s.repo.UpdateUserByID(userID, dto)
+}
+
+func (s *userService) DeleteUserByID(userID string) error {
+	return s.repo.DeleteUserByID(userID)
 }
 
 func (s *userService) GenerateHash(password string) (*string, error) {

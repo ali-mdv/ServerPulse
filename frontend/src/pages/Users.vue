@@ -49,35 +49,110 @@
               </div>
             </div>
           </div>
+          <Button
+            v-if="u.email !== authStore.user?.email"
+            variant="outline"
+            size="icon"
+            aria-label="Delete user"
+            @click="openDeleteModal(u)"
+          >
+            <Trash2 class="w-4 h-4" aria-hidden="true" />
+          </Button>
         </li>
       </ul>
     </Card>
+
+    <ConfirmModal
+      :visible="showDeleteModal"
+      title="Delete user"
+      :message="deleteMessage"
+      confirm-label="Delete"
+      :loading="deleting"
+      @update="showDeleteModal = $event"
+      @confirm="executeDelete"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useToast } from "primevue/usetoast";
-import { UserPlus } from "lucide-vue-next";
+import { UserPlus, Trash2 } from "lucide-vue-next";
 import { useUsersStore } from "@/stores/users";
+import { useAuthStore } from "@/stores/auth";
 import { User } from "@/types";
 import Card from "@/components/Card.vue";
 import Button from "@/components/ui/Button.vue";
+import ConfirmModal from "@/components/ConfirmModal.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import PageHeader from "@/components/ui/PageHeader.vue";
 import Skeleton from "@/components/ui/Skeleton.vue";
 
 const userStore = useUsersStore();
+const authStore = useAuthStore();
 
 const toast = useToast();
 
 const users = ref<Array<User>>([]);
 const loading = ref(true);
 
+const showDeleteModal = ref(false);
+const deleting = ref(false);
+const userToDelete = ref<User | null>(null);
+
+const deleteMessage = computed(() =>
+  userToDelete.value
+    ? `Are you sure you want to delete "${userToDelete.value.email}"? This cannot be undone.`
+    : "",
+);
+
 function initials(email?: string) {
   if (!email) return "?";
   const name = email.split("@")[0] ?? "";
   return name.charAt(0).toUpperCase();
+}
+
+function openDeleteModal(user: User) {
+  if (user.email === authStore.user?.email) return;
+  userToDelete.value = user;
+  showDeleteModal.value = true;
+}
+
+async function executeDelete() {
+  if (!userToDelete.value) return;
+  if (userToDelete.value.email === authStore.user?.email) {
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: "You cannot delete your own account.",
+      life: 3000,
+    });
+    showDeleteModal.value = false;
+    userToDelete.value = null;
+    return;
+  }
+  deleting.value = true;
+  try {
+    await userStore.deleteUser(String(userToDelete.value.id));
+    toast.add({
+      severity: "success",
+      summary: "Deleted",
+      detail: `User '${userToDelete.value.email}' removed.`,
+      life: 3000,
+    });
+    showDeleteModal.value = false;
+    users.value = await userStore.getUsers();
+  } catch (err: any) {
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: err.message,
+      life: 3000,
+    });
+  } finally {
+    deleting.value = false;
+    userToDelete.value = null;
+  }
 }
 
 onMounted(async () => {

@@ -13,7 +13,7 @@ MongoDB persists users, authentication, and configuration.
 
 | Layer    | Tech                                                                    |
 |----------|-------------------------------------------------------------------------|
-| Backend  | Go 1.24+, Gin, MongoDB driver, Viper, JWT, gopsutil, Docker SDK, Air     |
+| Backend  | Go 1.24+, Gin, MongoDB driver, Viper, Cobra, JWT, gopsutil, Docker SDK, Air     |
 | Frontend | Vue 3, vue-router, Pinia, VueUse, Vite, TypeScript, TailwindCSS, Naive UI, ECharts, Axios |
 | Database | MongoDB 7                                                               |
 | Infra    | Docker, docker-compose, nginx (reverse proxy + SPA host)                |
@@ -26,6 +26,7 @@ MongoDB persists users, authentication, and configuration.
 ServerPulse/
 ├── backend/                 # Go service
 │   ├── cmd/main.go          # entrypoint
+│   ├── cmd/cli/             # cobra management CLI (users)
 │   ├── internal/
 │   │   ├── handlers/        # gin HTTP handlers
 │   │   ├── services/        # business logic (system, docker, pm2, auth, user)
@@ -186,6 +187,35 @@ The frontend reads Vite build-time vars (see `.env.example` at root):
 - `VITE_APP_NAME`, `VITE_APP_VERSION`
 
 Both the nginx image and the vite dev server proxy `/api/*` to the backend, so the app works from any device on the network without a hardcoded `localhost`. For `pnpm dev` on the host, the proxy targets `http://localhost:12000` (override with `VITE_PROXY_TARGET`); in the Docker dev overlay it targets `http://backend:12000`.
+
+---
+
+## Management CLI
+
+`backend/cmd/cli/` is a standalone [Cobra](https://github.com/spf13/cobra) binary for managing backend resources directly against MongoDB, bypassing the HTTP/JWT layer. It loads the same `pkg/config` env as the server (`DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`), so run it from `backend/` where the `.env` lives.
+
+```bash
+cd backend
+
+# list all users
+go run ./cmd/cli user list
+
+# retrieve one user (by id or email)
+go run ./cmd/cli user get --id <id>
+go run ./cmd/cli user get --email alice@example.com
+
+# create a user
+go run ./cmd/cli user create --email alice@example.com --password secret123
+
+# update email and/or password
+go run ./cmd/cli user update --id <id> --email new@example.com
+go run ./cmd/cli user update --id <id> --password newsecret
+
+# delete a user
+go run ./cmd/cli user delete --id <id>
+```
+
+Passwords are hashed with bcrypt by the same `UserService` the API uses, and output is sanitized JSON (id/email/timestamps — never the hash). The CLI is not part of the production image (`Dockerfile` builds `./cmd` only); run it from source, or add a build stage if you need it inside the container.
 
 ---
 

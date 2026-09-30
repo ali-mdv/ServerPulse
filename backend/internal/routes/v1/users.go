@@ -22,5 +22,6 @@ func RegisterUserRoutes(r *gin.RouterGroup) {
 		api.PUT("/profile", handler.UpdateUserProfile)
 		api.GET("/:userID", handler.GetUserByID)
 		api.PUT("/:userID", handler.UpdateUser)
+		api.DELETE("/:userID", handler.DeleteUser)
 	}
 }

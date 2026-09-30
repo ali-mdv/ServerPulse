@@ -201,6 +201,20 @@ func (r *fakeUserRepo) UpdateUserByID(userID string, data dtos.UpdateUserDTO) (*
 	return target, nil
 }
 
+func (r *fakeUserRepo) DeleteUserByID(userID string) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return errors.New("bad id")
+	}
+	for key, u := range r.users {
+		if u.ID == oid {
+			delete(r.users, key)
+			return nil
+		}
+	}
+	return mongo.ErrNoDocuments
+}
+
 // fakeStateRepo is the in-memory repository used by services/state_service_test.
 type fakeStateRepo struct {
 	providerStates []models.ProviderState
@@ -303,6 +317,7 @@ func (s *fakeUserService) CreateUser(dtos.CreateUserDTO) (*models.User, error) {
 func (s *fakeUserService) UpdateUserByID(string, dtos.UpdateUserDTO) (*models.User, error) {
 	return nil, nil
 }
+func (s *fakeUserService) DeleteUserByID(string) error { return nil }
 func (s *fakeUserService) GenerateHash(p string) (*string, error) {
 	h := hashForTest(p)
 	return &h, nil

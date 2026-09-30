@@ -104,6 +104,27 @@ func (h *userHandler) UpdateUser(c *gin.Context) {
 	})
 }
 
+func (h *userHandler) DeleteUser(c *gin.Context) {
+	userID := c.Param("userID")
+
+	if err := h.service.DeleteUserByID(userID); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "user not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "user deleted",
+	})
+}
+
 func (h *userHandler) GetUserProfile(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	userIDStr, ok := userID.(string)

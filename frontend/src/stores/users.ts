@@ -81,10 +81,28 @@ export const useUsersStore = defineStore("users", () => {
     }
   }
 
+  async function deleteUser(id: string): Promise<void> {
+    try {
+      await api.delete(`users/${id}`, {
+        headers: {
+          Authorization: authStore.getToken(),
+        },
+      });
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 401) {
+          throw new Error("Access denied");
+        }
+      }
+      throw new Error("Failed to delete user");
+    }
+  }
+
   return {
     getProfile,
     updateProfile,
     getUsers,
     addUser,
+    deleteUser,
   };
 });
