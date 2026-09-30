@@ -1,7 +1,12 @@
 package handlers
 
 import (
+	stderrors "errors"
+	"net"
 	"net/http"
+	"strings"
+
+	dockerclient "github.com/docker/docker/client"
 	"server-monitoring/internal/services"
 	"server-monitoring/pkg/errors"
 
@@ -10,6 +15,19 @@ import (
 
 type dockerHandler struct {
 	service services.DockerService
+}
+
+// isDockerUnavailable reports whether the docker daemon (or its socket) is
+// unreachable -- a degraded, not fatal, condition for polling endpoints.
+func isDockerUnavailable(err error) bool {
+	if dockerclient.IsErrConnectionFailed(err) {
+		return true
+	}
+	var opErr *net.OpError
+	if stderrors.As(err, &opErr) {
+		return true
+	}
+	return strings.Contains(err.Error(), "Cannot connect to the Docker daemon")
 }
 
 func NewDockerHandler(service services.DockerService) *dockerHandler {
@@ -39,6 +57,15 @@ func (h *dockerHandler) GetDockerImages(c *gin.Context) {
 func (h *dockerHandler) GetDockerContainers(c *gin.Context) {
 	containers, err := h.service.ContainersList(true)
 	if err != nil {
+		// Polling endpoint: degrade instead of failing. The frontend hides
+		// the Docker section when the daemon is not reachable.
+		if isDockerUnavailable(err) {
+			c.JSON(http.StatusOK, gin.H{
+				"containers": []any{},
+				"available":  false,
+			})
+			return
+		}
 		switch e := err.(type) {
 		case *errors.AppError:
 			c.JSON(e.Code, gin.H{
@@ -54,6 +81,7 @@ func (h *dockerHandler) GetDockerContainers(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"containers": containers,
+		"available":  true,
 	})
 }
 

@@ -1,0 +1,21 @@
+root = "."
+tmp_dir = "/out"
+
+[build]
+  cmd = "go build -o /out/main.exe ./cmd"
+  bin = "/out/main.exe"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "vendor", "out"]
+  exclude_file = []
+  follow_symlink = true
+  delay = 1000
+  stop_on_error = true
+
+[log]
+  time = true
+
+[color]
+  main = "yellow"
+  watcher = "cyan"
+  build = "green"
+  runner = "magenta"

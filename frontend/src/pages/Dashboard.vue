@@ -1,86 +1,163 @@
 <template>
   <div class="space-y-6">
     <!-- Top Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <Card v-for="(item, i) in topStats" :key="i">
-        <div>
-          <div class="text-sm text-muted">{{ item.label }}</div>
-          <div :class="['text-2xl font-bold', item.color]">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm text-muted-foreground">{{ item.label }}</span>
+          <component
+            v-if="item.icon"
+            :is="item.icon"
+            class="w-4 h-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </div>
+        <div :class="['text-2xl font-bold mt-1', item.color]">
+          <template v-if="statsLoading">
+            <Skeleton width="3rem" height="1.75rem" />
+          </template>
+          <template v-else>
             {{ item.value }}
-          </div>
+          </template>
         </div>
       </Card>
     </div>
 
     <!-- CPU -->
-    <div class="grid grid-cols-1 gap-4">
-      <Card>
-        <h3 class="font-semibold mb-3">CPU Usage (Total)</h3>
-        <v-chart :option="cpuOption" style="height: 260px; width: 100%" />
-      </Card>
-    </div>
+    <Card>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">CPU Usage (Total)</h3>
+        <router-link to="/system/cpu">
+          <Button variant="outline" size="sm">
+            <LineChart class="w-4 h-4" aria-hidden="true" />
+            History
+          </Button>
+        </router-link>
+      </div>
+      <div v-if="usageLoading" class="space-y-2">
+        <Skeleton height="1rem" width="60%" />
+        <Skeleton height="240px" />
+      </div>
+      <v-chart v-else :option="cpuOption" :autoresize="true" style="height: 260px; width: 100%" />
+    </Card>
 
     <!-- MEMORY & DISK -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <Card>
-        <h3 class="font-semibold mb-3">Memory Usage</h3>
-        <v-chart :option="memOption" style="height: 240px; width: 100%" />
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold">Memory Usage</h3>
+          <router-link to="/system/memory">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
+        <div v-if="usageLoading" class="space-y-2">
+          <Skeleton height="1rem" width="60%" />
+          <Skeleton height="220px" />
+        </div>
+        <v-chart v-else :option="memOption" :autoresize="true" style="height: 240px; width: 100%" />
       </Card>
 
       <Card>
-        <h3 class="font-semibold mb-3">Disk Usage</h3>
-        <v-chart :option="diskOption" style="height: 240px; width: 100%" />
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold">Disk Usage</h3>
+          <router-link to="/system/disk">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
+        <div v-if="usageLoading" class="space-y-2">
+          <Skeleton height="1rem" width="60%" />
+          <Skeleton height="220px" />
+        </div>
+        <v-chart v-else :option="diskOption" :autoresize="true" style="height: 240px; width: 100%" />
       </Card>
     </div>
 
     <!-- Network Charts -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <Card>
-        <h3 class="font-semibold mb-2">Network Traffic Sent (KB/s)</h3>
-        <v-chart :option="netSendOption" class="h-32 w-full" />
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold">Network Sent (KB/s)</h3>
+          <router-link to="/system/network">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
+        <Skeleton v-if="usageLoading" height="120px" />
+        <v-chart v-else :option="netSendOption" :autoresize="true" class="h-32 w-full" />
       </Card>
 
       <Card>
-        <h3 class="font-semibold mb-2">Network Traffic Received (KB/s)</h3>
-        <v-chart :option="netReceivedOption" class="h-32 w-full" />
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold">Network Received (KB/s)</h3>
+          <router-link to="/system/network">
+            <Button variant="outline" size="sm">
+              <LineChart class="w-4 h-4" aria-hidden="true" />
+              History
+            </Button>
+          </router-link>
+        </div>
+        <Skeleton v-if="usageLoading" height="120px" />
+        <v-chart v-else :option="netReceivedOption" :autoresize="true" class="h-32 w-full" />
       </Card>
     </div>
 
-    <!-- Services List -->
-    <ServiceManagerPanel
-      :services="pm2Services"
-      :containers="dockerContainers"
-    />
-
     <!-- High Usage Servers -->
-    <div>
-      <h3 class="font-semibold mb-3">Servers with High Usage</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card v-for="s in highServers" :key="s.id">
-          <div class="font-bold">{{ s.name }}</div>
-          <div class="text-sm text-muted">
-            CPU: {{ s.cpu }}% • Mem: {{ s.mem }}%
-          </div>
-        </Card>
+    <section v-if="highUsageServers.length">
+      <header class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-semibold">Servers with High Usage</h3>
+        <Badge tone="warning">{{ highUsageServers.length }}</Badge>
+      </header>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <router-link
+          v-for="s in highUsageServers"
+          :key="s.id"
+          :to="`/server/${s.id}`"
+          class="block"
+        >
+          <Card class="hover:border-foreground/30 transition-colors">
+            <div class="flex items-center justify-between gap-2">
+              <div class="font-semibold truncate">{{ s.name }}</div>
+              <Badge :tone="s.status === 'online' ? 'success' : 'critical'">
+                {{ s.status }}
+              </Badge>
+            </div>
+            <div class="text-sm text-muted-foreground mt-1">
+              CPU: {{ s.cpu }}% • Mem: {{ s.mem }}%
+            </div>
+          </Card>
+        </router-link>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, onMounted, ref, watch } from "vue";
+import { reactive, computed, onMounted, ref, watchEffect } from "vue";
 import { useToast } from "primevue/usetoast";
+import { Server, Activity, AlertTriangle, CircleSlash, LineChart } from "lucide-vue-next";
 import Card from "@/components/Card.vue";
 import { useSystemStore } from "@/stores/system";
-import { UsageInfo, NetIOInfo, PM2Service, DockerContainer } from "@/types";
-import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
+import { UsageInfo, NetIOInfo } from "@/types";
+import Skeleton from "@/components/ui/Skeleton.vue";
+import Badge from "@/components/ui/Badge.vue";
+import Button from "@/components/ui/Button.vue";
+import { useChartTheme } from "@/composables";
+import { fetchServers } from "@/api/servers";
+import { HistoryRange } from "@/api/history";
+import { withAlpha } from "@/lib/chart-theme";
 
 const toast = useToast();
 const systemStore = useSystemStore();
+const chartTheme = useChartTheme();
 
-// ---------------------------
-// Helpers
-// ---------------------------
 function parseBytes(value: number, base = 1024, decimals = 2) {
   if (value === 0) return { number: 0, unit: "Bytes" };
 
@@ -91,39 +168,112 @@ function parseBytes(value: number, base = 1024, decimals = 2) {
   return { number, unit: units[index] };
 }
 
-// ---------------------------
-// Top Stats
-// ---------------------------
-const topStats = [
-  { label: "Total Servers", value: 12 },
-  { label: "Online", value: 10, color: "text-green-600" },
-  { label: "Down", value: 2, color: "text-red-600" },
-  { label: "High Load", value: 3, color: "text-yellow-600" },
-];
+const allServers = ref<Array<{ id: string; name: string; status: string; cpu: number; mem: number }>>([]);
 
-// ---------------------------
-// CPU Chart
-// ---------------------------
+const topStats = computed(() => {
+  const total = allServers.value.length;
+  const online = allServers.value.filter((s) => s.status === "online").length;
+  const down = allServers.value.filter((s) => s.status === "down").length;
+  const highLoad = allServers.value.filter(
+    (s) => s.cpu >= 80 || s.mem >= 80,
+  ).length;
+  return [
+    { label: "Total Servers", value: total, icon: Server, color: "text-foreground" },
+    { label: "Online", value: online, icon: Activity, color: "text-success" },
+    { label: "Down", value: down, icon: CircleSlash, color: "text-critical" },
+    { label: "High Load", value: highLoad, icon: AlertTriangle, color: "text-warning" },
+  ];
+});
+
+const statsLoading = ref(true);
+const usageLoading = ref(true);
+
 const cpuData = reactive({
   labels: Array(12).fill("-"),
   values: Array(12).fill(0),
 });
 
-const cpuOption = computed(() => ({
-  tooltip: { trigger: "axis" },
-  xAxis: { type: "category", data: cpuData.labels },
-  yAxis: { type: "value" },
+const cpuOption = ref({
+  animation: false,
+  tooltip: {
+    trigger: "axis",
+    backgroundColor: chartTheme.value.popover,
+    borderColor: chartTheme.value.border,
+    borderWidth: 1,
+    textStyle: { color: chartTheme.value.text },
+    extraCssText:
+      "box-shadow: 0 4px 12px rgba(0,0,0,0.25); border-radius: 6px;",
+    formatter: (params: { axisValue: string; data: number }[]) => {
+      const p = params[0];
+      if (!p) return "";
+      const value =
+        typeof p.data === "number" && !Number.isNaN(p.data)
+          ? `${p.data.toFixed(1)}%`
+          : "—";
+      return `${p.axisValue}<br/>CPU: <strong>${value}</strong>`;
+    },
+  },
+  grid: { left: 40, right: 16, top: 16, bottom: 28 },
+  xAxis: {
+    type: "category",
+    data: cpuData.labels,
+    axisLine: { lineStyle: { color: chartTheme.value.border } },
+    axisLabel: { color: chartTheme.value.textMuted, fontSize: 11 },
+    axisTick: { lineStyle: { color: chartTheme.value.border } },
+  },
+  yAxis: {
+    type: "value",
+    splitLine: { lineStyle: { color: chartTheme.value.border, type: "dashed" } },
+    axisLabel: { color: chartTheme.value.textMuted, fontSize: 11 },
+  },
   series: [
     {
       name: "CPU %",
       type: "line",
       data: cpuData.values,
       smooth: true,
-      lineStyle: { color: "#2563EB" },
-      areaStyle: { color: "rgba(37,99,235,0.1)" },
+      symbol: "circle",
+      symbolSize: 6,
+      showSymbol: cpuData.values.some((v) => v > 0),
+      lineStyle: { color: chartTheme.value.info, width: 2.5 },
+      itemStyle: { color: chartTheme.value.info, borderColor: chartTheme.value.popover, borderWidth: 2 },
+      areaStyle: {
+        color: {
+          type: "linear",
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: withAlpha(chartTheme.value.info, 0.33) },
+            { offset: 1, color: withAlpha(chartTheme.value.info, 0) },
+          ],
+        },
+      },
     },
   ],
-}));
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const opt = cpuOption.value;
+  opt.tooltip.backgroundColor = theme.popover;
+  opt.tooltip.borderColor = theme.border;
+  opt.tooltip.textStyle.color = theme.text;
+  opt.xAxis.data = cpuData.labels;
+  opt.xAxis.axisLine.lineStyle.color = theme.border;
+  opt.xAxis.axisLabel.color = theme.textMuted;
+  opt.xAxis.axisTick.lineStyle.color = theme.border;
+  opt.yAxis.splitLine.lineStyle.color = theme.border;
+  opt.yAxis.axisLabel.color = theme.textMuted;
+  opt.series[0].data = cpuData.values;
+  opt.series[0].showSymbol = cpuData.values.some((v) => v > 0);
+  opt.series[0].lineStyle.color = theme.info;
+  opt.series[0].itemStyle.color = theme.info;
+  opt.series[0].itemStyle.borderColor = theme.popover;
+  opt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.info, 0.33);
+  opt.series[0].areaStyle.color.colorStops[1].color = withAlpha(theme.info, 0);
+});
 
 function updateCpu(cpuUsage: number) {
   const time = new Date().toLocaleTimeString([], {
@@ -141,16 +291,29 @@ function updateCpu(cpuUsage: number) {
   cpuData.values.push(Math.round(cpuUsage));
 }
 
-// ---------------------------
-// Memory Chart
-// ---------------------------
-const memOption = reactive({
-  tooltip: { trigger: "item" },
-  legend: { bottom: 0 },
+const memData = reactive({
+  title: "Total: 0 GB",
+  used: 0,
+  free: 0,
+});
+
+const memOption = ref({
+  animation: false,
+  tooltip: {
+    trigger: "item",
+    backgroundColor: chartTheme.value.popover,
+    borderColor: chartTheme.value.border,
+    textStyle: { color: chartTheme.value.text },
+  },
+  legend: {
+    bottom: 0,
+    textStyle: { color: chartTheme.value.textMuted },
+  },
   title: {
-    text: "Total: 0 GB",
+    text: memData.title,
     left: "center",
     bottom: 15,
+    textStyle: { color: chartTheme.value.text, fontSize: 12, fontWeight: 500 },
   },
   series: [
     {
@@ -159,11 +322,36 @@ const memOption = reactive({
       radius: "75%",
       center: ["50%", "45%"],
       data: [
-        { value: 0, name: "Used" },
-        { value: 0, name: "Free" },
+        {
+          value: memData.used,
+          name: "Used",
+          itemStyle: { color: chartTheme.value.info },
+        },
+        {
+          value: memData.free,
+          name: "Free",
+          itemStyle: { color: chartTheme.value.free },
+        },
       ],
+      label: { color: chartTheme.value.text },
     },
   ],
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const opt = memOption.value;
+  opt.tooltip.backgroundColor = theme.popover;
+  opt.tooltip.borderColor = theme.border;
+  opt.tooltip.textStyle.color = theme.text;
+  opt.legend.textStyle.color = theme.textMuted;
+  opt.title.text = memData.title;
+  opt.title.textStyle.color = theme.text;
+  opt.series[0].data[0].value = memData.used;
+  opt.series[0].data[0].itemStyle.color = theme.info;
+  opt.series[0].data[1].value = memData.free;
+  opt.series[0].data[1].itemStyle.color = theme.free;
+  opt.series[0].label.color = theme.text;
 });
 
 function updateMemory(mem: UsageInfo) {
@@ -171,21 +359,34 @@ function updateMemory(mem: UsageInfo) {
   const used = parseBytes(mem.used);
   const free = parseBytes(mem.total - mem.used);
 
-  memOption.series[0].data[0].value = used.number;
-  memOption.series[0].data[1].value = free.number;
-  memOption.title.text = `Total: ${total.number} ${total.unit}`;
+  memData.used = used.number;
+  memData.free = free.number;
+  memData.title = `Total: ${total.number} ${total.unit}`;
 }
 
-// ---------------------------
-// Disk Chart
-// ---------------------------
-const diskOption = reactive({
-  tooltip: { trigger: "item" },
-  legend: { bottom: 0 },
+const diskData = reactive({
+  title: "Total: 0 GB",
+  used: 0,
+  free: 0,
+});
+
+const diskOption = ref({
+  animation: false,
+  tooltip: {
+    trigger: "item",
+    backgroundColor: chartTheme.value.popover,
+    borderColor: chartTheme.value.border,
+    textStyle: { color: chartTheme.value.text },
+  },
+  legend: {
+    bottom: 0,
+    textStyle: { color: chartTheme.value.textMuted },
+  },
   title: {
-    text: "Total: 0 GB",
+    text: diskData.title,
     left: "center",
     bottom: 15,
+    textStyle: { color: chartTheme.value.text, fontSize: 12, fontWeight: 500 },
   },
   series: [
     {
@@ -194,11 +395,36 @@ const diskOption = reactive({
       radius: "75%",
       center: ["50%", "45%"],
       data: [
-        { value: 0, name: "Used" },
-        { value: 0, name: "Free" },
+        {
+          value: diskData.used,
+          name: "Used",
+          itemStyle: { color: chartTheme.value.warning },
+        },
+        {
+          value: diskData.free,
+          name: "Free",
+          itemStyle: { color: chartTheme.value.free },
+        },
       ],
+      label: { color: chartTheme.value.text },
     },
   ],
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const opt = diskOption.value;
+  opt.tooltip.backgroundColor = theme.popover;
+  opt.tooltip.borderColor = theme.border;
+  opt.tooltip.textStyle.color = theme.text;
+  opt.legend.textStyle.color = theme.textMuted;
+  opt.title.text = diskData.title;
+  opt.title.textStyle.color = theme.text;
+  opt.series[0].data[0].value = diskData.used;
+  opt.series[0].data[0].itemStyle.color = theme.warning;
+  opt.series[0].data[1].value = diskData.free;
+  opt.series[0].data[1].itemStyle.color = theme.free;
+  opt.series[0].label.color = theme.text;
 });
 
 function updateDiskUsageChart(diskUsage: UsageInfo) {
@@ -206,22 +432,56 @@ function updateDiskUsageChart(diskUsage: UsageInfo) {
   const used = parseBytes(diskUsage.used, 1000);
   const free = parseBytes(diskUsage.total - diskUsage.used, 1000);
 
-  diskOption.series[0].data[0].value = used.number;
-  diskOption.series[0].data[1].value = free.number;
-  diskOption.title.text = `Total: ${total.number} ${total.unit}`;
+  diskData.used = used.number;
+  diskData.free = free.number;
+  diskData.title = `Total: ${total.number} ${total.unit}`;
 }
 
-// ---------------------------
-// Network Charts (Shared Logic)
-// ---------------------------
 const netSent = ref<number[]>(Array(20).fill(0));
 const netReceived = ref<number[]>(Array(20).fill(0));
+const netSentLabels = ref<string[]>(Array(20).fill(""));
+const netReceivedLabels = ref<string[]>(Array(20).fill(""));
 
-function createNetOption(source: number[]) {
+function createNetOption(
+  source: number[],
+  labels: string[],
+  label: string,
+) {
   return {
-    tooltip: { trigger: "axis" },
-    xAxis: { type: "category", data: source.map(() => "") },
-    yAxis: { type: "value", show: false },
+    animation: false,
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: chartTheme.value.popover,
+      borderColor: chartTheme.value.border,
+      textStyle: { color: chartTheme.value.text },
+      formatter: (params: { axisValue: string; data: number }[]) => {
+        const p = params[0];
+        if (!p) return "";
+        const value =
+          typeof p.data === "number" && !Number.isNaN(p.data)
+            ? `${p.data} KB/s`
+            : "—";
+        return `${p.axisValue}<br/>${label}: <strong>${value}</strong>`;
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: labels,
+      axisLine: { lineStyle: { color: chartTheme.value.border } },
+      axisTick: { show: false },
+      axisLabel: {
+        show: true,
+        color: chartTheme.value.textMuted,
+        fontSize: 10,
+        interval: 4,
+        formatter: (v: string) => v,
+      },
+    },
+    yAxis: {
+      type: "value",
+      show: false,
+      splitLine: { show: false },
+    },
     grid: { left: 0, right: 0, top: 10, bottom: 10 },
     series: [
       {
@@ -229,99 +489,164 @@ function createNetOption(source: number[]) {
         type: "line",
         data: source,
         smooth: true,
-        lineStyle: { color: "#059669" },
-        areaStyle: { color: "rgba(5,150,105,0.08)" },
+        symbol: "none",
+        lineStyle: { color: chartTheme.value.success, width: 2 },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: withAlpha(chartTheme.value.success, 0.33) },
+              { offset: 1, color: withAlpha(chartTheme.value.success, 0) },
+            ],
+          },
+        },
       },
     ],
   };
 }
 
-const netSendOption = computed(() => createNetOption(netSent.value));
-const netReceivedOption = computed(() => createNetOption(netReceived.value));
+const netSendOption = ref(
+  createNetOption(netSent.value, netSentLabels.value, "Sent"),
+);
+const netReceivedOption = ref(
+  createNetOption(netReceived.value, netReceivedLabels.value, "Received"),
+);
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const sendOpt = netSendOption.value;
+  sendOpt.tooltip.backgroundColor = theme.popover;
+  sendOpt.tooltip.borderColor = theme.border;
+  sendOpt.tooltip.textStyle.color = theme.text;
+  sendOpt.xAxis.data = netSentLabels.value;
+  sendOpt.xAxis.axisLine.lineStyle.color = theme.border;
+  sendOpt.xAxis.axisLabel.color = theme.textMuted;
+  sendOpt.series[0].data = netSent.value;
+  sendOpt.series[0].lineStyle.color = theme.success;
+  sendOpt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.success, 0.33);
+  sendOpt.series[0].areaStyle.color.colorStops[1].color = withAlpha(theme.success, 0);
+});
+
+watchEffect(() => {
+  const theme = chartTheme.value;
+  const recvOpt = netReceivedOption.value;
+  recvOpt.tooltip.backgroundColor = theme.popover;
+  recvOpt.tooltip.borderColor = theme.border;
+  recvOpt.tooltip.textStyle.color = theme.text;
+  recvOpt.xAxis.data = netReceivedLabels.value;
+  recvOpt.xAxis.axisLine.lineStyle.color = theme.border;
+  recvOpt.xAxis.axisLabel.color = theme.textMuted;
+  recvOpt.series[0].data = netReceived.value;
+  recvOpt.series[0].lineStyle.color = theme.success;
+  recvOpt.series[0].areaStyle.color.colorStops[0].color = withAlpha(theme.success, 0.33);
+  recvOpt.series[0].areaStyle.color.colorStops[1].color = withAlpha(theme.success, 0);
+});
 
 function updateNetwork(io: NetIOInfo) {
   const sent = Math.round(io.sent / 1024);
   const received = Math.round(io.received / 1024);
+  const time = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-  if (netSent.value.length >= 20) netSent.value.shift();
-  if (netReceived.value.length >= 20) netReceived.value.shift();
+  if (netSent.value.length >= 20) {
+    netSent.value.shift();
+    netSentLabels.value.shift();
+  }
+  if (netReceived.value.length >= 20) {
+    netReceived.value.shift();
+    netReceivedLabels.value.shift();
+  }
 
   netSent.value.push(sent);
+  netSentLabels.value.push(time);
   netReceived.value.push(received);
+  netReceivedLabels.value.push(time);
 }
 
-// ---------------------------
-// PM2 Services
-// ---------------------------
+const highUsageServers = computed(() =>
+  allServers.value
+    .filter((s) => s.cpu >= 80 || s.mem >= 80)
+    .sort((a, b) => b.cpu + b.mem - (a.cpu + a.mem))
+    .slice(0, 6),
+);
 
-const pm2Services = ref<PM2Service[]>([]);
-
-// ---------------------------
-// Docker Containers
-// ---------------------------
-
-const dockerContainers = ref<DockerContainer[]>([]);
-
-// ---------------------------
-// High Usage Servers (static)
-// ---------------------------
-const highServers = [
-  { id: "1", name: "web-01", cpu: 92, mem: 78 },
-  { id: "2", name: "db-01", cpu: 88, mem: 85 },
-  { id: "3", name: "cache-01", cpu: 79, mem: 61 },
-];
-
-// ---------------------------
-// Data Fetching
-// ---------------------------
 async function loadSystemUsage() {
   try {
-    const data = await systemStore.fetchSystemUsage();
+    const data = await systemStore.fetchSystemState();
     updateCpu(data.cpuUsage);
     updateMemory(data.memUsage);
     updateNetwork(data.netIO);
     updateDiskUsageChart(data.diskUsage);
   } catch (err: any) {
-    toast.add({
-      severity: "error",
-      summary: "Error",
-      detail: err.message,
-    });
+    toast.add({ severity: "error", summary: "Error", detail: err.message });
+  } finally {
+    usageLoading.value = false;
+    statsLoading.value = false;
   }
 }
 
-async function loadPm2Services() {
+async function loadServers() {
   try {
-    const data = await systemStore.fetchPM2Services();
-    pm2Services.value = data;
+    allServers.value = await fetchServers();
   } catch (err: any) {
-    toast.add({
-      severity: "error",
-      summary: "Error",
-      detail: err.message,
-    });
+    toast.add({ severity: "error", summary: "Error", detail: err.message });
+  } finally {
+    statsLoading.value = false;
   }
 }
 
-async function loadDockerContainers() {
+async function loadChartHistory() {
   try {
-    const data = await systemStore.fetchDockerContainers();
-    dockerContainers.value = data;
+    const [cpuPoints, sentPoints, recvPoints] = await Promise.all([
+      systemStore.fetchServiceHistory("system", "cpu", "1h"),
+      systemStore.fetchServiceHistory("system", "network_sent", "1h"),
+      systemStore.fetchServiceHistory("system", "network_recv", "1h"),
+    ]);
+
+    const recentCpu = cpuPoints.slice(-12);
+    cpuData.labels = recentCpu.map((p) =>
+      new Date(p.ts).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+    );
+    cpuData.values = recentCpu.map((p) => Math.round(p.cpu ?? 0));
+
+    const recentSent = sentPoints.slice(-20);
+    const recentRecv = recvPoints.slice(-20);
+    netSent.value = recentSent.map((p) => Math.round((p.netSent ?? 0) / 1024));
+    netSentLabels.value = recentSent.map((p) =>
+      new Date(p.ts).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    );
+    netReceived.value = recentRecv.map((p) =>
+      Math.round((p.netRecv ?? 0) / 1024),
+    );
+    netReceivedLabels.value = recentRecv.map((p) =>
+      new Date(p.ts).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    );
   } catch (err: any) {
-    toast.add({
-      severity: "error",
-      summary: "Error",
-      detail: err.message,
-    });
+    toast.add({ severity: "error", summary: "Error", detail: err.message });
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  loadServers();
+  await loadChartHistory();
   loadSystemUsage();
-  loadPm2Services();
-  loadDockerContainers();
+  setInterval(loadServers, systemStore.intervalMS * 6);
   setInterval(loadSystemUsage, systemStore.intervalMS);
-  setInterval(loadPm2Services, systemStore.intervalMS);
-  setInterval(loadDockerContainers, systemStore.intervalMS);
 });
 </script>

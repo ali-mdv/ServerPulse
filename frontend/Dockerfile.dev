@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1.6
+# Dev image: toolchain + dependencies are baked in.
+# Source code is bind-mounted (read-only) at runtime; vite dep-cache lives in
+# the container's writable layer. Only dependency changes (pnpm-lock.yaml)
+# require a rebuild.
+# NOTE: node_modules must be baked in -- pnpm probes the project root for
+# writability (`path-temp` writes `_tmp_*` in the project dir), which breaks
+# on a read-only project mount, so a runtime `pnpm install` is not possible.
+FROM node:22-alpine
+
+RUN npm install -g pnpm@10.19.0
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile
+
+EXPOSE 8080
+
+CMD ["pnpm", "exec", "vite", "--config", "/app/vite.config.docker.ts", "--configLoader", "native"]

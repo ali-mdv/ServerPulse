@@ -1,29 +1,27 @@
 <template>
   <Dialog
     v-model:visible="isOpen"
-    :header="`${serviceName} Logs`"
+    :header="`${serviceName} — Logs`"
     modal
     :style="{ width: '90vw', maxWidth: '900px' }"
     class="p-fluid"
     @show="scrollToBottom"
   >
     <div class="space-y-4">
-      <div v-if="loading" class="flex items-center justify-center p-8">
-        <div class="text-center">
-          <div class="mb-2">Loading logs...</div>
-          <div class="text-sm text-muted">Please wait</div>
-        </div>
+      <div
+        v-if="loading"
+        class="flex items-center justify-center p-8 text-sm text-muted-foreground"
+        role="status"
+        aria-live="polite"
+      >
+        <Spinner size="md" class="mr-2" />
+        Loading logs…
       </div>
 
       <div
         v-else
         ref="logsContainer"
-        class="bg-gray-900 text-gray-100 p-4 rounded text-sm overflow-auto max-h-96 border border-gray-700"
-        style="
-          font-family: 'Menlo', 'Monaco', 'Courier New', 'Courier', monospace;
-          white-space: pre-wrap;
-          word-break: break-word;
-        "
+        class="rounded-md border border-border bg-zinc-950 text-zinc-100 p-4 text-sm overflow-auto max-h-96 font-mono whitespace-pre-wrap break-words"
       >
         <div
           v-for="(line, index) in logLines"
@@ -31,31 +29,29 @@
           class="py-0"
           v-html="line"
         ></div>
-        <div v-if="logLines.length === 0" class="text-gray-500">
+        <div v-if="logLines.length === 0" class="text-zinc-500">
           No logs available
         </div>
       </div>
 
-      <div class="flex gap-2 justify-end">
-        <button
-          @click="refreshLogs"
-          :disabled="loading"
-          class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-        >
-          {{ loading ? "Refreshing..." : "Refresh" }}
-        </button>
-        <button
+      <div class="flex flex-wrap gap-2 justify-end">
+        <Button
+          variant="secondary"
+          :disabled="loading || logLines.length === 0"
           @click="copyToClipboard"
-          class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition"
         >
+          <template #icon-left>
+            <Copy class="w-4 h-4" aria-hidden="true" />
+          </template>
           Copy
-        </button>
-        <button
-          @click="isOpen = false"
-          class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition"
-        >
-          Close
-        </button>
+        </Button>
+        <Button variant="info" :loading="loading" @click="refreshLogs">
+          <template v-if="!loading" #icon-left>
+            <RotateCw class="w-4 h-4" aria-hidden="true" />
+          </template>
+          {{ loading ? "Refreshing…" : "Refresh" }}
+        </Button>
+        <Button variant="outline" @click="isOpen = false">Close</Button>
       </div>
     </div>
   </Dialog>
@@ -65,8 +61,11 @@
 import { ref, computed, watch, nextTick } from "vue";
 import Dialog from "primevue/dialog";
 import { useToast } from "primevue/usetoast";
+import { Copy, RotateCw } from "lucide-vue-next";
 import { ansiToHtml } from "@/lib/ansi-to-html";
 import { LogsModalProps } from "@/types";
+import Button from "@/components/ui/Button.vue";
+import Spinner from "@/components/ui/Spinner.vue";
 
 const props = withDefaults(defineProps<LogsModalProps>(), {
   visible: false,
@@ -90,9 +89,9 @@ function scrollToBottom() {
   });
 }
 
-const logLines = computed(() => {
-  return props.content.split("\n").map((line) => ansiToHtml(line));
-});
+const logLines = computed(() =>
+  props.content.split("\n").map((line) => ansiToHtml(line)),
+);
 
 watch(
   () => props.visible,
@@ -108,19 +107,14 @@ watch(isOpen, (newVal) => {
 watch(
   () => props.loading,
   (newLoading) => {
-    // When loading finishes, scroll to bottom after content renders
-    if (!newLoading) {
-      scrollToBottomAfterRender();
-    }
+    if (!newLoading) scrollToBottomAfterRender();
   },
 );
 
 watch(
   () => props.content,
   () => {
-    if (!props.loading) {
-      scrollToBottomAfterRender();
-    }
+    if (!props.loading) scrollToBottomAfterRender();
   },
   { flush: "post" },
 );
@@ -132,6 +126,7 @@ function scrollToBottomAfterRender() {
     }
   });
 }
+
 function refreshLogs() {
   emit("refresh");
   toast.add({
@@ -147,11 +142,9 @@ function fallbackCopy(text: string) {
   textarea.value = text;
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
-
   document.body.appendChild(textarea);
   textarea.focus();
   textarea.select();
-
   try {
     document.execCommand("copy");
   } finally {
@@ -168,7 +161,7 @@ async function copyToClipboard() {
       detail: "Logs copied to clipboard",
       life: 2000,
     });
-  } catch (err) {
+  } catch {
     try {
       fallbackCopy(props.content);
       toast.add({
@@ -177,7 +170,7 @@ async function copyToClipboard() {
         detail: "Logs copied to clipboard",
         life: 2000,
       });
-    } catch (err) {
+    } catch {
       toast.add({
         severity: "error",
         summary: "Error",

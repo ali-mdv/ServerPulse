@@ -47,6 +47,12 @@ func (s *dockerService) humanSize(size int64) string {
 	return fmt.Sprintf("%.2f%s", f, units[i])
 }
 
+// FormatBytesHuman renders an int64 byte count as a human-readable
+// string (e.g. "1.05MB"). Used by the test/setup helpers.
+func FormatBytesHuman(size int64) string {
+	return (&dockerService{}).humanSize(size)
+}
+
 func NewDockerService() DockerService {
 	client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {

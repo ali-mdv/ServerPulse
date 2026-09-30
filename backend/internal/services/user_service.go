@@ -17,6 +17,7 @@ type UserService interface {
 	FindUserByID(string) (*models.User, error)
 	FindUserByEmail(string) (*models.User, error)
 	UpdateUserByID(string, dtos.UpdateUserDTO) (*models.User, error)
+	DeleteUserByID(string) error
 	GenerateHash(string) (*string, error)
 }
 
@@ -28,6 +29,12 @@ func NewUserService(dbName string) UserService {
 	db := database.GetDatabase(dbName)
 	userRepo := repository.NewUserRepository(db)
 	return &userService{repo: userRepo}
+}
+
+// NewUserServiceFromRepo is the repo-backed constructor used by the
+// test/setup helpers. Not part of the stable API.
+func NewUserServiceFromRepo(repo repository.UserRepository) UserService {
+	return &userService{repo: repo}
 }
 
 func (s *userService) UsersList() (*[]models.User, error) {
@@ -67,6 +74,10 @@ func (s *userService) UpdateUserByID(userID string, dto dtos.UpdateUserDTO) (*mo
 	}
 
 	return s.repo.UpdateUserByID(userID, dto)
+}
+
+func (s *userService) DeleteUserByID(userID string) error {
+	return s.repo.DeleteUserByID(userID)
 }
 
 func (s *userService) GenerateHash(password string) (*string, error) {

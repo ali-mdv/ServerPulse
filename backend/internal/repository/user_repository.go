@@ -19,6 +19,7 @@ type UserRepository interface {
 	FindUserByEmail(string) (*models.User, error)
 	CreateUser(dtos.CreateUserDTO) (*models.User, error)
 	UpdateUserByID(string, dtos.UpdateUserDTO) (*models.User, error)
+	DeleteUserByID(string) error
 }
 
 type userRepository struct {
@@ -129,27 +130,45 @@ func (r *userRepository) UpdateUserByID(userID string, data dtos.UpdateUserDTO) 
 		return nil, fmt.Errorf("invalid user ID: %v", err)
 	}
 
-	user, _ := r.FindUserByEmail(*data.Email)
-	if user != nil && user.ID != objectID {
-		return nil, errors.ErrConflict
-	}
-
-	update := bson.D{}
+	set := bson.D{}
 
 	if data.Email != nil {
-		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "email", Value: *data.Email}}})
+		existing, _ := r.FindUserByEmail(*data.Email)
+		if existing != nil && existing.ID != objectID {
+			return nil, errors.ErrConflict
+		}
+		set = append(set, bson.E{Key: "email", Value: *data.Email})
 	}
 	if data.Password != nil {
-		update = append(update, bson.E{Key: "$set", Value: bson.D{{Key: "password", Value: *data.Password}}})
+		set = append(set, bson.E{Key: "password", Value: *data.Password})
 	}
 
-	if len(update) != 0 {
-		_, err = r.Collection.UpdateByID(context.TODO(), objectID, update)
-		if err != nil {
+	if len(set) != 0 {
+		set = append(set, bson.E{Key: "updatedAt", Value: time.Now()})
+		update := bson.D{{Key: "$set", Value: set}}
+		if _, err = r.Collection.UpdateByID(context.TODO(), objectID, update); err != nil {
 			return nil, err
 		}
 	}
 
-	user, _ = r.FindUserByID(userID)
-	return user, nil
+	return r.FindUserByID(userID)
+}
+
+func (r *userRepository) DeleteUserByID(userID string) error {
+	objectID, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID: %v", err)
+	}
+
+	res, err := r.Collection.DeleteOne(context.TODO(), bson.D{
+		{Key: "_id", Value: objectID},
+	})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
 }

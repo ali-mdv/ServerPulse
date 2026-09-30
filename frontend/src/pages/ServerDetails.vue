@@ -1,158 +1,385 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-2xl font-semibold">{{ server?.name || 'Server details' }}</h2>
-        <div class="text-sm text-muted">Status: {{ server?.status || 'unknown' }}</div>
-      </div>
-      <div>
-        <router-link to="/servers" class="px-3 py-1 border rounded">Back</router-link>
-      </div>
+    <PageHeader
+      :title="server?.name || 'Server details'"
+      :subtitle="subtitle"
+    >
+      <template #default>
+        <Badge v-if="server?.status" :tone="statusTone">
+          {{ server.status }}
+        </Badge>
+        <Button
+          v-if="server"
+          variant="outline"
+          size="sm"
+          :loading="generatingKey"
+          @click="generateKey"
+        >
+          <Key class="w-4 h-4" aria-hidden="true" />
+          API key
+        </Button>
+        <router-link :to="`/servers/${id}/edit`">
+          <Button variant="outline" size="sm">
+            <Pencil class="w-4 h-4" aria-hidden="true" />
+            Edit
+          </Button>
+        </router-link>
+        <router-link to="/servers">
+          <Button variant="outline" size="sm">
+            <ChevronLeft class="w-4 h-4" aria-hidden="true" />
+            Back
+          </Button>
+        </router-link>
+      </template>
+    </PageHeader>
+
+    <div
+      v-if="loading"
+      class="grid gap-3"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading server"
+    >
+      <Skeleton height="11rem" />
+      <Skeleton height="11rem" />
     </div>
 
-    <div v-if="loading" class="p-6 bg-card rounded">Loading...</div>
-    <div v-else-if="!server" class="p-6 bg-card rounded">Server not found.</div>
+    <EmptyState
+      v-else-if="!server"
+      title="Server not found"
+      description="Check the URL or pick a different server."
+    />
 
     <div v-else class="space-y-4">
-      <!-- Global charts -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="col-span-1 bg-card p-4 rounded border h-44">
-          <h3 class="font-semibold mb-2">CPU Usage</h3>
-          <v-chart :option="cpuOption" style="height:120px; width:100%" />
-        </div>
-        <div class="col-span-1 bg-card p-4 rounded border h-44">
-          <h3 class="font-semibold mb-2">Memory Usage</h3>
-          <v-chart :option="memOption" style="height:120px; width:100%" />
-        </div>
-        <div class="col-span-1 bg-card p-4 rounded border h-44">
-          <h3 class="font-semibold mb-2">Network Traffic (KB/s)</h3>
-          <v-chart :option="netOption" style="height:120px; width:100%" />
-        </div>
+      <div
+        v-if="apiKey"
+        class="card card-body border-warning/40 bg-warning/10 text-sm"
+        role="status"
+      >
+        <strong class="font-semibold">API key generated.</strong>
+        Copy it now — it will not be shown again.
+        <code class="block mt-1 break-all">{{ apiKey }}</code>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">CPU Usage</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View CPU usage history"
+              @click="openHistory('cpu')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
+          <div class="text-3xl font-bold mt-1">{{ cpu }}%</div>
+          <div class="w-full bg-muted rounded-full h-2 mt-3">
+            <div
+              class="bg-info h-2 rounded-full transition-all"
+              :style="{ width: `${Math.min(cpu, 100)}%` }"
+            />
+          </div>
+        </Card>
+
+        <Card>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">Memory Usage</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View memory usage history"
+              @click="openHistory('memory')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
+          <div class="text-3xl font-bold mt-1">{{ mem }}%</div>
+          <div class="text-xs text-muted-foreground mt-1">
+            {{ memUsed }} / {{ memTotal }}
+          </div>
+          <div class="w-full bg-muted rounded-full h-2 mt-2">
+            <div
+              class="bg-warning h-2 rounded-full transition-all"
+              :style="{ width: `${Math.min(mem, 100)}%` }"
+            />
+          </div>
+        </Card>
+
+        <Card>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">Disk Usage</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View disk usage history"
+              @click="openHistory('disk')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
+          <div class="text-3xl font-bold mt-1">{{ disk }}%</div>
+          <div class="text-xs text-muted-foreground mt-1">
+            {{ diskUsed }} / {{ diskTotal }}
+          </div>
+          <div class="w-full bg-muted rounded-full h-2 mt-2">
+            <div
+              class="bg-success h-2 rounded-full transition-all"
+              :style="{ width: `${Math.min(disk, 100)}%` }"
+            />
+          </div>
+        </Card>
+
+        <Card>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">Network I/O</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View network I/O history"
+              @click="openHistory('network')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
+          <div class="text-lg font-bold mt-1">
+            ↑ {{ netSent }} KB/s
+          </div>
+          <div class="text-lg font-bold">
+            ↓ {{ netReceived }} KB/s
+          </div>
+          <div class="text-xs text-muted-foreground mt-1">per second</div>
+        </Card>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="col-span-2 space-y-4">
-          <div class="bg-card p-4 rounded border">
-            <h3 class="font-semibold mb-2">Overview</h3>
-            <div class="flex gap-4">
-              <div>CPU: <span class="font-bold">{{ server.cpu }}%</span></div>
-              <div>Memory: <span class="font-bold">{{ server.mem }}%</span></div>
-              <div>Network: <span class="font-bold">{{ latestNet }} KB/s</span></div>
-            </div>
-          </div>
-
-          <ServiceManagerPanel :pm2="server.pm2" :docker="server.docker" />
+        <div class="lg:col-span-2">
+          <ServiceManagerPanel
+            :services="pm2Services"
+            :pm2-available="pm2Available"
+            :containers="dockerContainers"
+            :docker-available="dockerAvailable"
+            :loading="servicesLoading"
+            :server-id="id"
+            searchable
+          />
         </div>
 
         <div class="space-y-4">
-          <div class="bg-card p-4 rounded border">
-            <h3 class="font-semibold mb-2">Alerts</h3>
-            <div v-for="a in alerts" :key="a.id" class="p-2 border-b last:border-b-0">
-              <div class="font-medium">{{ a.title }}</div>
-              <div class="text-sm text-muted">{{ a.time }}</div>
-            </div>
-          </div>
+          <Card>
+            <h3 class="font-semibold mb-2">Server Info</h3>
+            <dl class="text-sm space-y-2">
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">Host</dt>
+                <dd class="font-medium">{{ server.host || "—" }}</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">Port</dt>
+                <dd class="font-medium">{{ server.port || "—" }}</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">Last seen</dt>
+                <dd class="font-medium">{{ lastSeen }}</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">Created</dt>
+                <dd class="font-medium">{{ formatDate(server.createdAt) }}</dd>
+              </div>
+            </dl>
+            <p
+              v-if="server.description"
+              class="text-sm text-muted-foreground mt-3 border-t pt-3"
+            >
+              {{ server.description }}
+            </p>
+          </Card>
 
-          <div class="bg-card p-4 rounded border">
-            <h3 class="font-semibold mb-2">Service Summary</h3>
-            <div>Total PM2: {{ server.pm2?.length || 0 }}</div>
-            <div>Total Docker: {{ server.docker?.length || 0 }}</div>
-          </div>
+          <Card>
+            <h3 class="font-semibold mb-2">Provider Summary</h3>
+            <dl class="text-sm space-y-1">
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">PM2</dt>
+                <dd>
+                  <Badge :tone="pm2Available ? 'success' : 'neutral'">
+                    {{ pm2Available ? "Available" : "Unavailable" }}
+                  </Badge>
+                </dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-muted-foreground">Docker</dt>
+                <dd>
+                  <Badge :tone="dockerAvailable ? 'success' : 'neutral'">
+                    {{ dockerAvailable ? "Available" : "Unavailable" }}
+                  </Badge>
+                </dd>
+              </div>
+            </dl>
+          </Card>
         </div>
       </div>
     </div>
+
+    <MetricHistoryModal
+      :visible="historyVisible"
+      :metric="historyMetric"
+      :server-id="id"
+      @update="historyVisible = $event"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useRoute } from 'vue-router';
-import { fetchServer } from '@/api/servers';
-import ServiceManagerPanel from '@/components/ServiceManagerPanel.vue';
+import { ref, onMounted, onBeforeUnmount, computed } from "vue";
+import { useRoute } from "vue-router";
+import { useToast } from "primevue/usetoast";
+import { ChevronLeft, Pencil, Key, History } from "lucide-vue-next";
+import { fetchServer, generateServerApiKey, type Server } from "@/api/servers";
+import { fetchServicesState, fetchSystemState } from "@/api/state";
+import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
+import MetricHistoryModal from "@/components/MetricHistoryModal.vue";
+import Card from "@/components/Card.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import PageHeader from "@/components/ui/PageHeader.vue";
+import Badge from "@/components/ui/Badge.vue";
+import Button from "@/components/ui/Button.vue";
+import Skeleton from "@/components/ui/Skeleton.vue";
+import {
+  snapshotsToPM2Services,
+  snapshotsToDockerContainers,
+} from "@/lib/service-snapshot";
+import { PM2Service, DockerContainer, ProviderState, SystemMetricKey } from "@/types";
 
+const toast = useToast();
 const route = useRoute();
 const id = route.params.id as string;
-const server = ref<any | null>(null);
+
+const server = ref<Server | null>(null);
 const loading = ref(true);
+const servicesLoading = ref(true);
+const apiKey = ref("");
+const generatingKey = ref(false);
 
-const alerts = ref([
-  { id: 'a1', title: 'High CPU detected', time: '10:12' },
-  { id: 'a2', title: 'Container restarted', time: '09:50' }
-]);
+const historyVisible = ref(false);
+const historyMetric = ref<SystemMetricKey | null>(null);
 
-// histories
-const cpuHistory = ref<number[]>([]);
-const memHistory = ref<number[]>([]);
-const netHistory = ref<number[]>([]);
-let timer: any = null;
+function openHistory(metric: SystemMetricKey) {
+  historyMetric.value = metric;
+  historyVisible.value = true;
+}
 
-const smallOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { display: false } } };
+const pm2State = ref<ProviderState>({ provider: "pm2", available: false, services: [], updatedAt: "" });
+const dockerState = ref<ProviderState>({ provider: "docker", available: false, services: [], updatedAt: "" });
 
-const cpuChart = computed(() => ({ labels: cpuHistory.value.map((_,i)=>''), datasets: [{ label: 'CPU', data: cpuHistory.value.slice(), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', tension: 0.3 }] }));
-const memChart = computed(() => ({ labels: memHistory.value.map((_,i)=>''), datasets: [{ label: 'Mem', data: memHistory.value.slice(), borderColor: '#2563EB', backgroundColor: 'rgba(37,99,235,0.08)', tension: 0.3 }] }));
-const netChart = computed(() => ({ labels: netHistory.value.map((_,i)=>''), datasets: [{ label: 'Net', data: netHistory.value.slice(), borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.08)', tension: 0.3 }] }));
+let timer: ReturnType<typeof setInterval> | null = null;
 
-const cpuOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  xAxis: { type: 'category', data: cpuChart.value.labels },
-  yAxis: { type: 'value', show: false },
-  grid: { left: 0, right: 0, top: 10, bottom: 10 },
-  series: [{ name: cpuChart.value.datasets[0].label, type: 'line', data: cpuChart.value.datasets[0].data, smooth: true, lineStyle: { color: cpuChart.value.datasets[0].borderColor }, areaStyle: { color: cpuChart.value.datasets[0].backgroundColor } }]
-}));
+const pm2Services = computed<PM2Service[]>(() =>
+  snapshotsToPM2Services(pm2State.value.services ?? []),
+);
+const pm2Available = computed(() => pm2State.value.available);
 
-const memOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  xAxis: { type: 'category', data: memChart.value.labels },
-  yAxis: { type: 'value', show: false },
-  grid: { left: 0, right: 0, top: 10, bottom: 10 },
-  series: [{ name: memChart.value.datasets[0].label, type: 'line', data: memChart.value.datasets[0].data, smooth: true, lineStyle: { color: memChart.value.datasets[0].borderColor }, areaStyle: { color: memChart.value.datasets[0].backgroundColor } }]
-}));
+const dockerContainers = computed<DockerContainer[]>(() =>
+  snapshotsToDockerContainers(dockerState.value.services ?? []),
+);
+const dockerAvailable = computed(() => dockerState.value.available);
 
-const netOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  xAxis: { type: 'category', data: netChart.value.labels },
-  yAxis: { type: 'value', show: false },
-  grid: { left: 0, right: 0, top: 10, bottom: 10 },
-  series: [{ name: netChart.value.datasets[0].label, type: 'line', data: netChart.value.datasets[0].data, smooth: true, lineStyle: { color: netChart.value.datasets[0].borderColor }, areaStyle: { color: netChart.value.datasets[0].backgroundColor } }]
-}));
-
-const latestNet = computed(() => netHistory.value.length ? netHistory.value[netHistory.value.length-1] : 0);
-
-onMounted(async () => {
-  loading.value = true;
-  const data = await fetchServer(id);
-  server.value = data;
-
-  // init histories with values
-  const initialCpu = server.value?.cpu ?? 0;
-  const initialMem = server.value?.mem ?? 0;
-  const initialNet = 0;
-  cpuHistory.value = Array.from({length:20}, ()=>initialCpu);
-  memHistory.value = Array.from({length:20}, ()=>initialMem);
-  netHistory.value = Array.from({length:20}, ()=>initialNet);
-
-  // simulate updates every 2s
-  timer = setInterval(()=>{
-    if (!server.value) return;
-    // update server metrics slightly
-    const cpu = Math.max(0, Math.min(100, (server.value.cpu ?? initialCpu) + Math.round((Math.random()-0.5)*8)));
-    const mem = Math.max(0, Math.min(100, (server.value.mem ?? initialMem) + Math.round((Math.random()-0.5)*6)));
-    const net = Math.max(0, Math.round(Math.random()*200));
-    server.value.cpu = cpu;
-    server.value.mem = mem;
-
-    cpuHistory.value.push(cpu);
-    memHistory.value.push(mem);
-    netHistory.value.push(net);
-    if (cpuHistory.value.length > 20) cpuHistory.value.shift();
-    if (memHistory.value.length > 20) memHistory.value.shift();
-    if (netHistory.value.length > 20) netHistory.value.shift();
-  }, 2000);
-
-  loading.value = false;
+const statusTone = computed<"success" | "critical" | "neutral">(() => {
+  const s = server.value?.status;
+  if (s === "online") return "success";
+  if (s === "down") return "critical";
+  return "neutral";
 });
 
-onBeforeUnmount(()=>{
+const subtitle = computed(() => {
+  if (!server.value) return "Loading…";
+  const parts: string[] = [];
+  if (server.value.host) parts.push(server.value.host);
+  if (server.value.port) parts.push(String(server.value.port));
+  return parts.length ? parts.join(":") : "Server details";
+});
+
+const usage = computed(() => server.value?.usage?.usage);
+
+const cpu = computed(() => Math.round(usage.value?.cpuUsage ?? 0));
+const mem = computed(() => Math.round(usage.value?.memUsage.percent ?? 0));
+const disk = computed(() => Math.round(usage.value?.diskUsage.percent ?? 0));
+const netSent = computed(() => Math.round((usage.value?.netIO.sent ?? 0) / 1024));
+const netReceived = computed(() => Math.round((usage.value?.netIO.received ?? 0) / 1024));
+
+function parseBytes(value: number) {
+  if (value === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.floor(Math.log(value) / Math.log(1024));
+  const number = Number((value / Math.pow(1024, index)).toFixed(2));
+  return `${number} ${units[index]}`;
+}
+
+const memUsed = computed(() => parseBytes(usage.value?.memUsage.used ?? 0));
+const memTotal = computed(() => parseBytes(usage.value?.memUsage.total ?? 0));
+const diskUsed = computed(() => parseBytes(usage.value?.diskUsage.used ?? 0));
+const diskTotal = computed(() => parseBytes(usage.value?.diskUsage.total ?? 0));
+
+const lastSeen = computed(() =>
+  server.value?.lastSeen ? formatDate(server.value.lastSeen) : "Never",
+);
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+async function loadServer() {
+  try {
+    const data = await fetchServer(id);
+    if (data) server.value = data;
+  } catch (err: any) {
+    toast.add({ severity: "error", summary: "Error", detail: err.message, life: 3000 });
+  }
+}
+
+async function loadState() {
+  try {
+    const [services, system] = await Promise.all([
+      fetchServicesState(id),
+      fetchSystemState(id),
+    ]);
+    pm2State.value = services.pm2;
+    dockerState.value = services.docker;
+    if (server.value && system.systemUsage) {
+      server.value.usage = {
+        serverId: id,
+        updatedAt: system.updatedAt ?? new Date().toISOString(),
+        usage: system.systemUsage,
+      };
+    }
+  } catch (err: any) {
+    toast.add({ severity: "error", summary: "Error", detail: err.message, life: 3000 });
+  } finally {
+    servicesLoading.value = false;
+  }
+}
+
+async function generateKey() {
+  generatingKey.value = true;
+  try {
+    apiKey.value = await generateServerApiKey(id);
+  } catch (err: any) {
+    toast.add({ severity: "error", summary: "Error", detail: err.message, life: 3000 });
+  } finally {
+    generatingKey.value = false;
+  }
+}
+
+onMounted(async () => {
+  await loadServer();
+  loading.value = false;
+  await loadState();
+  timer = setInterval(async () => {
+    await loadServer();
+    await loadState();
+  }, 10000);
+});
+
+onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
 });
 </script>

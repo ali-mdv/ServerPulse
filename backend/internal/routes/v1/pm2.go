@@ -8,8 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterPM2Routes(r *gin.RouterGroup) {
-	service := services.NewPM2Service()
+func RegisterPM2Routes(r *gin.RouterGroup, service services.PM2Service) {
 	handler := handlers.NewPM2Handler(service)
 
 	api := r.Group("/pm2")

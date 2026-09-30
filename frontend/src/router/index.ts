@@ -4,7 +4,11 @@ import Dashboard from "@/pages/Dashboard.vue";
 import Alerts from "@/pages/Alerts.vue";
 import Settings from "@/pages/Settings.vue";
 import Servers from "@/pages/Servers.vue";
+import AddServer from "@/pages/AddServer.vue";
+import EditServer from "@/pages/EditServer.vue";
 import ServerDetails from "@/pages/ServerDetails.vue";
+import ServiceDetails from "@/pages/ServiceDetails.vue";
+import SystemMetricHistory from "@/pages/SystemMetricHistory.vue";
 import Users from "@/pages/Users.vue";
 import AddUser from "@/pages/AddUser.vue";
 import Profile from "@/pages/Profile.vue";
@@ -42,9 +46,33 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/servers/new",
+    component: AddServer,
+    name: "serversAdd",
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/servers/:id/edit",
+    component: EditServer,
+    name: "serversEdit",
+    meta: { requiresAuth: true },
+  },
+  {
     path: "/server/:id",
     component: ServerDetails,
     name: "serversDetail",
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/service/:provider/:id",
+    component: ServiceDetails,
+    name: "serviceDetail",
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/system/:metric",
+    component: SystemMetricHistory,
+    name: "systemMetricHistory",
     meta: { requiresAuth: true },
   },
   {

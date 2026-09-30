@@ -8,8 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterSystemRoutes(r *gin.RouterGroup) {
-	service := services.NewSystemService()
+func RegisterSystemRoutes(r *gin.RouterGroup, service services.SystemService) {
 	handler := handlers.NewSystemHandler(service)
 
 	api := r.Group("/system")

@@ -1,114 +1,22 @@
-# Fusion Starter
+# ServerPulse UI(Frontend) — Agent guidance
 
-A production-ready front-end Vue application template with SPA mode, TypeScript, Vitest, Zod and modern tooling.
+- **Stack:** Vue 3 (`<script setup>`), vue-router 4, Pinia, VueUse, Axios, Naive UI, ECharts (via `vue-echarts`), TailwindCSS 3, TypeScript, Vite 7.
+- **Pages** live in `frontend/src/pages/`. Components in `frontend/src/components/`. Pinia stores in `frontend/src/stores/`. Typed API clients in `frontend/src/api/`.
+- **Routing:** add a new page by dropping a `.vue` in `pages/` and registering it in `frontend/src/router/index.ts`.
+- **API calls:** import from `@/api/*`, not raw axios. The axios instance in `plugins/axios.ts` handles auth header injection.
+- **State:** Pinia only. Don't introduce another state library.
+- **Forms:** `vee-validate` + `yup` (see `pages/Profile.vue`, `pages/AddUser.vue` for the pattern).
+- **Charts:** ECharts via `vue-echarts`. Don't pull in chart.js.
+- **Styling:** Tailwind utility classes + Naive UI components. The `cn()` helper from `lib/utils.ts` is the way to compose class strings.
+- **Tests:** Vitest. Co-locate as `*.spec.ts`.
+- **TypeScript:** strict mode (`tsconfig.json`). Don't loosen `strict` or `noImplicitAny`.
 
-## Tech Stack
+## Conventions
 
-- **PNPM**: Prefer pnpm
-- **Frontend**: Vue 3 + vue-router (spa) + TypeScript + Vite + TailwindCSS 3
-- **Testing**: Vitest
-- **UI**: Radix UI + TailwindCSS 3 + Lucide React icons
+- **Vue components:** `<script setup lang="ts">`. Props via `defineProps`, emits via `defineEmits`, no Options API.
+- **Naming:** Uses PascalCase components, camelCase functions.
+- **Imports:** prefer `@/` alias in frontend over deep relative paths.
 
-## Project Structure
+## What NOT to do
 
-```
-client/                   # React SPA frontend
-├── pages/                # Route components (Index.tsx = home)
-├── components/ui/        # Pre-built UI component library
-├── App.tsx                # App entry point and with SPA routing setup
-└── global.css            # TailwindCSS 3 theming and global styles
-
-shared/                   # Types used by both client & server
-└── api.ts                # Example of how to share api interfaces
-```
-
-## Key Features
-
-## SPA Routing System
-
-The routing system is powered by React Router 6:
-
-- `client/router/Index.ts` represents the home page.
-- Routes are defined in `client/App.tsx` using the `react-router-dom` import
-- Route files are located in the `client/pages/` directory
-
-For example, routes can be defined with:
-
-```typescript
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-
-<Routes>
-  <Route path="/" element={<Index />} />
-  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-  <Route path="*" element={<NotFound />} />
-</Routes>;
-```
-
-### Styling System
-
-- **Primary**: TailwindCSS 3 utility classes
-- **Theme and design tokens**: Configure in `client/global.css`
-- **UI components**: Pre-built library in `client/components/ui/`
-- **Utility**: `cn()` function combines `clsx` + `tailwind-merge` for conditional classes
-
-```typescript
-// cn utility usage
-className={cn(
-  "base-classes",
-  { "conditional-class": condition },
-  props.className  // User overrides
-)}
-```
-
-### Shared Types
-
-Import consistent types in client:
-
-```typescript
-import { DemoResponse } from "@shared/api";
-```
-
-Path aliases:
-
-- `@shared/*` - Shared folder
-- `@/*` - Client folder
-
-## Development Commands
-
-```bash
-pnpm dev        # Start dev server
-pnpm build      # Production build
-pnpm start      # Start production server
-pnpm typecheck  # TypeScript validation
-pnpm test          # Run Vitest tests
-```
-
-## Adding Features
-
-### Add new colors to the theme
-
-Open `client/global.css` and `tailwind.config.ts` and add new tailwind colors.
-
-### New Page Route
-
-1. Create component in `client/pages/MyPage.tsx`
-2. Add route in `client/App.tsx`:
-
-```typescript
-<Route path="/my-page" element={<MyPage />} />
-```
-
-## Production Deployment
-
-- **Standard**: `pnpm build`
-- **Binary**: Self-contained executables (Linux, macOS, Windows)
-- **Cloud Deployment**: Use either Netlify or Vercel via their MCP integrations for easy deployment. Both providers work well with this starter template.
-
-## Architecture Notes
-
-- Single-port development with Vite + Express integration
-- TypeScript throughout (client, shared)
-- Full hot reload for rapid development
-- Production-ready with multiple deployment options
-- Comprehensive UI component library included
-- Type-safe API communication via shared interfaces
+- Don't replace Naive UI or ECharts without checking the consuming pages first.

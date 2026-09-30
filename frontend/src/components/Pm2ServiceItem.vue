@@ -1,59 +1,85 @@
 <template>
-  <div class="p-3 bg-card rounded border flex items-center justify-between">
-    <div>
-      <div class="font-medium">
-        {{ props.service.name }}
-        <span class="text-sm text-muted">
-          • {{ props.service.pm2_env.status }}
-        </span>
+  <div
+    class="card card-body flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+  >
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-medium truncate">{{ props.service.name }}</span>
+        <Badge :tone="stateTone">{{ props.service.pm2_env.status }}</Badge>
       </div>
-      <div class="text-sm text-muted">
-        • Up Time: {{ uptime }} • Restart:
-        {{ props.service.pm2_env.restart_time }}
+      <div class="text-xs text-muted-foreground mt-1">
+        Up Time: {{ uptime }} • Restarts: {{ props.service.pm2_env.restart_time }}
       </div>
-      <div class="flex gap-2 flex-wrap mt-2">
-        <button
+      <div class="flex gap-2 flex-wrap mt-3">
+        <Button
+          variant="success"
+          size="sm"
+          :disabled="
+            loading ||
+            actionInProgress === ServiceAction.START ||
+            props.service.pm2_env.status === PM2ServiceState.ONLINE
+          "
+          :loading="actionInProgress === ServiceAction.START"
           @click="handleAction(ServiceAction.START)"
-          :disabled="
-            loading || props.service.pm2_env.status === PM2ServiceState.ONLINE
-          "
-          class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          {{ ServiceAction.START }}
-        </button>
-        <button
+          <template v-if="actionInProgress !== ServiceAction.START" #icon-left>
+            <Play class="w-3.5 h-3.5" aria-hidden="true" />
+          </template>
+          Start
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          :disabled="
+            loading ||
+            actionInProgress === ServiceAction.STOP ||
+            props.service.pm2_env.status !== PM2ServiceState.ONLINE
+          "
+          :loading="actionInProgress === ServiceAction.STOP"
           @click="handleAction(ServiceAction.STOP)"
-          :disabled="
-            loading || props.service.pm2_env.status !== PM2ServiceState.ONLINE
-          "
-          class="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          {{ ServiceAction.STOP }}
-        </button>
-        <button
+          <template v-if="actionInProgress !== ServiceAction.STOP" #icon-left>
+            <Square class="w-3.5 h-3.5" aria-hidden="true" />
+          </template>
+          Stop
+        </Button>
+        <Button
+          variant="info"
+          size="sm"
+          :disabled="loading || actionInProgress === ServiceAction.RESTART"
+          :loading="actionInProgress === ServiceAction.RESTART"
           @click="handleAction(ServiceAction.RESTART)"
-          :disabled="loading"
-          class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          {{ ServiceAction.RESTART }}
-        </button>
-        <button
+          <template v-if="actionInProgress !== ServiceAction.RESTART" #icon-left>
+            <RotateCw class="w-3.5 h-3.5" aria-hidden="true" />
+          </template>
+          Restart
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          :disabled="loading || actionInProgress === ServiceAction.LOGS"
+          :loading="actionInProgress === ServiceAction.LOGS"
           @click="handleAction(ServiceAction.LOGS)"
-          :disabled="loading"
-          class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
-          {{ ServiceAction.LOGS }}
-        </button>
+          <template #icon-left>
+            <ScrollText class="w-3.5 h-3.5" aria-hidden="true" />
+          </template>
+          Logs
+        </Button>
+        <router-link :to="historyLink">
+          <Button variant="outline" size="sm">
+            <template #icon-left>
+              <LineChart class="w-3.5 h-3.5" aria-hidden="true" />
+            </template>
+            History
+          </Button>
+        </router-link>
       </div>
     </div>
-    <div class="text-right">
-      <div class="text-sm">
-        CPU: <span class="font-semibold">{{ cpuPercent }}</span>
-      </div>
-      <div class="text-sm">
-        Mem:
-        <span class="font-semibold">{{ memUsage }}</span>
-      </div>
+    <div class="text-right text-sm shrink-0">
+      <div>CPU: <span class="font-semibold">{{ cpuPercent }}</span></div>
+      <div>Mem: <span class="font-semibold">{{ memUsage }}</span></div>
     </div>
   </div>
   <LogsModal
@@ -69,26 +95,36 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue";
 import { useToast } from "primevue/usetoast";
+import { Play, Square, RotateCw, ScrollText, LineChart } from "lucide-vue-next";
 import LogsModal from "@/components/LogsModal.vue";
 import { useSystemStore } from "@/stores/system";
 import { PM2Service, PM2ServiceState, ServiceAction } from "@/types";
+import Badge from "@/components/ui/Badge.vue";
+import Button from "@/components/ui/Button.vue";
 
-const props = defineProps<{ service: PM2Service }>();
+const props = defineProps<{
+  service: PM2Service;
+  /** Scopes History links and remote control actions. */
+  serverId?: string;
+}>();
+
+const historyLink = computed(() => ({
+  name: "serviceDetail",
+  params: { provider: "pm2", id: props.service.pm_id },
+  query: props.serverId ? { serverId: props.serverId } : {},
+}));
 
 function parseBytes(value: number, base = 1024, decimals = 2) {
   if (value === 0) return { number: 0, unit: "Bytes" };
-
   const units = ["Bytes", "KB", "MB", "GB", "TB"];
   const index = Math.floor(Math.log(value) / Math.log(base));
   const number = Number((value / Math.pow(base, index)).toFixed(decimals));
-
   return { number, unit: units[index] };
 }
 
 function parseUptime(value: number) {
   const now = Date.now();
   const uptimeMs = now - value;
-
   const seconds = Math.floor(uptimeMs / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
@@ -105,20 +141,16 @@ const memUsage = computed(() => {
   return `${parsed.number} ${parsed.unit}`;
 });
 
-const cpuPercent = computed(() => {
-  const cpu = props.service.monit.cpu;
-  return `${cpu} %`;
-});
+const cpuPercent = computed(() => `${props.service.monit.cpu} %`);
 
-const uptime = computed(() => {
-  const parsed = parseUptime(props.service.pm2_env.pm_uptime);
-  return parsed;
-});
+const uptime = computed(() => parseUptime(props.service.pm2_env.pm_uptime));
+
+const stateTone = computed<"success" | "neutral">(() =>
+  props.service.pm2_env.status === PM2ServiceState.ONLINE ? "success" : "neutral",
+);
 
 const toast = useToast();
-
 const loading = ref(false);
-
 const actionInProgress = ref<ServiceAction | null>(null);
 
 const showLogsModal = ref(false);
@@ -141,38 +173,41 @@ async function handleAction(action: ServiceAction) {
 
   try {
     if (action === ServiceAction.START) {
-      await systemStore.startPM2Service(props.service);
+      await systemStore.startPM2Service(props.service, props.serverId);
       toast.add({
-        severity: "info",
-        summary: "Info",
-        detail: `Successfully started service '${props.service.name}'.`,
+        severity: "success",
+        summary: "Started",
+        detail: `Service '${props.service.name}' is now online.`,
         life: 3000,
       });
     } else if (action === ServiceAction.STOP) {
-      await systemStore.stopPM2Service(props.service);
+      await systemStore.stopPM2Service(props.service, props.serverId);
       toast.add({
-        severity: "info",
-        summary: "Info",
-        detail: `Successfully stopped service '${props.service.name}'.`,
+        severity: "success",
+        summary: "Stopped",
+        detail: `Service '${props.service.name}' has stopped.`,
         life: 3000,
       });
     } else if (action === ServiceAction.RESTART) {
-      await systemStore.restartPM2Service(props.service);
+      await systemStore.restartPM2Service(props.service, props.serverId);
       toast.add({
-        severity: "info",
-        summary: "Info",
-        detail: `Successfully restarted service '${props.service.name}'.`,
+        severity: "success",
+        summary: "Restarted",
+        detail: `Service '${props.service.name}' has restarted.`,
         life: 3000,
       });
     } else if (action === ServiceAction.LOGS) {
       logsLoading.value = true;
-      const logs = await systemStore.getPM2ServiceLogs(props.service);
+      const logs = await systemStore.getPM2ServiceLogs(
+        props.service,
+        props.serverId,
+      );
       logsContent.value = logs;
       toast.add({
-        severity: "info",
-        summary: "Info",
-        detail: `Successfully retrieved logs for service '${props.service.name}'.`,
-        life: 3000,
+        severity: "success",
+        summary: "Logs loaded",
+        detail: `Showing latest logs for '${props.service.name}'.`,
+        life: 2000,
       });
       showLogsModal.value = true;
       logsLoading.value = false;

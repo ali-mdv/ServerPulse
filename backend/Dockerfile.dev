@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.6
+# Dev image: only toolchain + dependencies are baked in.
+# Source code is bind-mounted (read-only) at runtime, so Go code changes
+# never require an image rebuild -- air recompiles inside the container.
+# Caches are redirected to volume-backed paths because the container runs
+# as HOST_UID (non-root, see docker-compose.yml).
+FROM golang:1.26-alpine
+
+RUN apk add --no-cache git ca-certificates \
+    && go install github.com/air-verse/air@v1.61.7
+
+# Writable, volume-backed caches (volumes are declared in docker-compose.dev.yml).
+ENV GOCACHE=/out/go-build \
+    GOMODCACHE=/gomod
+
+WORKDIR /src
+
+# Dependencies only -- the app itself is not copied in (it's mounted).
+COPY go.mod go.sum ./
+RUN go mod download
+
+
+CMD ["sh", "-c", "go mod download && air -c .air.docker.toml"]

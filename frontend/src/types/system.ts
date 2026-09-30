@@ -50,6 +50,7 @@ export interface PM2Service {
 
 export interface GetPm2ServicesList {
   processes: PM2Service[];
+  available: boolean;
 }
 
 export const enum DockerContainerState {
@@ -81,6 +82,7 @@ export interface DockerContainer {
 
 export interface GetDockerContainersList {
   containers: DockerContainer[];
+  available: boolean;
 }
 
 export const enum ServiceAction {
@@ -92,4 +94,65 @@ export const enum ServiceAction {
 
 export interface GetLogsApi {
   logs: string;
+}
+
+export type HistoryProvider = "pm2" | "docker" | "system";
+
+export type SystemMetricKey = "cpu" | "memory" | "disk" | "network";
+
+export interface SnapshotMeta {
+  serverId?: string;
+  provider: HistoryProvider;
+  serviceId: string;
+  name: string;
+}
+
+export interface ServiceSnapshot {
+  ts: string;
+  meta: SnapshotMeta;
+  status?: string;
+  available: boolean;
+  cpu?: number;
+  memory?: number;
+  memUsage?: number;
+  disk?: number;
+  netSent?: number;
+  netRecv?: number;
+}
+
+export interface TrackedService {
+  provider: HistoryProvider;
+  serviceId: string;
+  name: string;
+}
+
+export interface GetTrackedServicesApi {
+  provider: HistoryProvider;
+  services: TrackedService[];
+}
+
+export interface GetServiceHistoryApi {
+  provider: HistoryProvider;
+  serviceId: string;
+  from: string;
+  to: string;
+  bucket: string;
+  points: ServiceSnapshot[];
+}
+
+export interface ProviderState {
+  provider: HistoryProvider;
+  updatedAt: string;
+  available: boolean;
+  services: ServiceSnapshot[];
+}
+
+export interface GetServicesStateApi {
+  pm2: ProviderState;
+  docker: ProviderState;
+}
+
+export interface GetSystemStateApi {
+  systemUsage: SystemUsage | null;
+  updatedAt: string | null;
 }

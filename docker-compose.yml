@@ -1,0 +1,71 @@
+name: serverpulse
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    expose:
+      - 27017
+
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${BACKEND_VERSION:-dev}
+    image: serverpulse/backend:${BACKEND_VERSION:-dev}
+    restart: unless-stopped
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    group_add:
+      - "${DOCKER_GID:-0}"
+    environment:
+      - GIN_MODE=${GIN_MODE:-release}
+      - PORT=12000
+      - DB_HOST="${DB_HOST:-mongo}"
+      - DB_PORT="${DB_PORT:-27017}"
+      - DB_USERNAME=${DB_USERNAME:-ali}
+      - DB_PASSWORD=${DB_PASSWORD:-123}
+      - ORIGINS=${ORIGINS}
+      - PM2_SOCKET_PATH=${PM2_SOCKET_PATH:-/run/pm2/rpc.sock}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PM2_HOME:-/run/pm2}:/run/pm2
+    expose:
+      - 12000
+
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_SERVER_ADDRESS: ${VITE_SERVER_ADDRESS}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_API_TIME_OUT: ${VITE_API_TIME_OUT}
+        VITE_ENVIRONMENT: ${VITE_ENVIRONMENT}
+        VITE_APP_NAME: ${VITE_APP_NAME}
+        VITE_APP_VERSION: ${VITE_APP_VERSION}
+    image: serverpulse/frontend:${FRONTEND_VERSION:-dev}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+
+volumes:
+  mongo_data:

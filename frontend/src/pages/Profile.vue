@@ -1,99 +1,135 @@
 <template>
-  <div class="w-full">
-    <h2 class="text-2xl font-semibold mb-4">Profile</h2>
-    <div class="bg-card p-6 rounded shadow">
+  <div class="space-y-6 max-w-xl">
+    <PageHeader title="Profile" subtitle="Manage your account details." />
+
+    <Card>
       <div class="flex items-center gap-4 mb-6">
-        <div
-          class="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-white text-xl font-bold"
+        <span
+          class="w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold"
+          aria-hidden="true"
         >
-          initials
-        </div>
-        <div>
-          <div class="text-sm text-muted">{{ user?.email }}</div>
+          {{ initials }}
+        </span>
+        <div class="min-w-0">
+          <div class="text-sm text-muted-foreground truncate">
+            {{ user?.email }}
+          </div>
         </div>
       </div>
 
-      <form @submit.prevent="onSave" class="grid grid-cols-1 gap-4">
-        <label class="flex flex-col">
-          <span class="text-sm font-medium mb-1">Full name</span>
-          <ErrorMessage name="name" v-slot="{ message }"
-            ><div class="text-sm text-red-600 mt-1">
-              {{ message }}
-            </div>
+      <form @submit.prevent="onSave" class="space-y-4" novalidate>
+        <div class="space-y-1.5">
+          <label for="profile-name" class="text-sm font-medium">
+            Full name
+          </label>
+          <Input
+            id="profile-name"
+            v-model="name"
+            type="text"
+            autocomplete="name"
+            :invalid="!!nameError"
+            :disabled="saving"
+          />
+          <ErrorMessage name="name" v-slot="{ message }">
+            <p class="text-xs text-critical mt-1">{{ message }}</p>
           </ErrorMessage>
-        </label>
+        </div>
 
-        <label class="flex flex-col">
-          <span class="text-sm font-medium mb-1">Email</span>
-          <input
+        <div class="space-y-1.5">
+          <label for="profile-email" class="text-sm font-medium">Email</label>
+          <Input
+            id="profile-email"
             v-model="email"
             type="email"
-            class="border rounded px-3 py-2"
+            autocomplete="email"
+            :invalid="!!emailError"
+            :disabled="saving"
           />
           <ErrorMessage name="email" v-slot="{ message }">
-            <div class="text-sm text-red-600 mt-1">
-              {{ message }}
-            </div>
+            <p class="text-xs text-critical mt-1">{{ message }}</p>
           </ErrorMessage>
-        </label>
+        </div>
 
-        <div class="flex gap-3 mt-4">
-          <button type="submit" class="px-4 py-2 bg-primary text-white rounded">
-            Save
-          </button>
-          <button type="button" @click="reset" class="px-4 py-2 border rounded">
+        <div class="flex gap-3 pt-2">
+          <Button type="submit" variant="primary" :loading="saving">
+            {{ saving ? "Saving…" : "Save changes" }}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            :disabled="saving"
+            @click="reset"
+          >
             Reset
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </Card>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { useToast } from "primevue/usetoast";
-import { useForm, ErrorMessage } from "vee-validate";
+import { useForm, useField, ErrorMessage } from "vee-validate";
 import * as yup from "yup";
 import { useUsersStore } from "@/stores/users";
 import { User } from "@/types";
+import Card from "@/components/Card.vue";
+import Input from "@/components/ui/Input.vue";
+import Button from "@/components/ui/Button.vue";
+import PageHeader from "@/components/ui/PageHeader.vue";
 
 const usersStore = useUsersStore();
 const toast = useToast();
 
-const user = ref<User>(null);
-const email = ref<string>("");
+const user = ref<User | null>(null);
+const saving = ref(false);
 
 const schema = yup.object({
+  name: yup.string().trim().min(2, "Name must be at least 2 characters"),
   email: yup.string().email("Invalid email").required("Email is required"),
 });
 
-const { handleSubmit } = useForm({
+const { handleSubmit, resetForm, errors } = useForm({
   validationSchema: schema,
-  initialValues: { email: email },
+  initialValues: { name: "", email: "" },
+});
+
+const { value: name } = useField<string>("name");
+const { value: email } = useField<string>("email");
+
+const nameError = computed(() => errors.value.name);
+const emailError = computed(() => errors.value.email);
+
+const initials = computed(() => {
+  const n = (name.value || user.value?.email || "?").trim();
+  return n.charAt(0).toUpperCase();
 });
 
 const onSave = handleSubmit(async (values) => {
-  console.log("save");
+  saving.value = true;
   try {
-    user.value = await usersStore.updateProfile(values.email.value);
+    user.value = await usersStore.updateProfile(values.email);
     toast.add({
       severity: "success",
       summary: "Saved",
       detail: "Profile saved",
       life: 3000,
     });
-  } catch (err) {
+  } catch (err: any) {
     toast.add({
       severity: "error",
       summary: "Error",
       detail: err.message,
     });
+  } finally {
+    saving.value = false;
   }
 });
 
 function reset() {
-  console.log("reset");
+  resetForm({ values: { name: name.value, email: email.value } });
 }
 
 onMounted(async () => {

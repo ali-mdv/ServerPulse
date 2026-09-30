@@ -9,23 +9,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Setup() *gin.Engine {
-	config := config.Load()
+func Setup(cfg *config.Config, s *v1.Services) *gin.Engine {
 	srv := gin.Default()
 
-	srv.Use(cors.New(cors.Config{
-		AllowOrigins:     config.Origins,
+	corsCfg := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
-	}))
+	}
+
+	// "*" with AllowCredentials is rejected by browsers. When the wildcard is
+	// requested, echo the caller's Origin back so credentials keep working.
+	if len(cfg.Origins) == 1 && cfg.Origins[0] == "*" {
+		corsCfg.AllowOriginFunc = func(origin string) bool { return true }
+	} else if len(cfg.Origins) > 0 {
+		corsCfg.AllowOrigins = cfg.Origins
+	}
+
+	srv.Use(cors.New(corsCfg))
 
 	r := srv.Group("/api")
 
 	{
-		v1.RegisterV1Routes(r)
+		v1.RegisterV1Routes(r, s)
 	}
 	return srv
 }
