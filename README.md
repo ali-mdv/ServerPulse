@@ -179,13 +179,13 @@ pnpm build                     # production bundle into dist/
 
 The frontend reads Vite build-time vars (see `.env.example` at root):
 
-- `VITE_SERVER_ADDRESS` — base URL the SPA expects itself to be served at
-- `VITE_API_BASE_URL` — usually `/api` so nginx can proxy
+- `VITE_SERVER_ADDRESS` — leave empty for same-origin requests through `/api/*` (nginx in prod, the vite dev proxy in dev)
+- `VITE_API_BASE_URL` — usually `/api/v1` so the proxy can forward
 - `VITE_API_TIME_OUT` — request timeout in ms
 - `VITE_ENVIRONMENT` — `development` | `production`
 - `VITE_APP_NAME`, `VITE_APP_VERSION`
 
-When building outside Docker, set `VITE_API_BASE_URL=http://localhost:12000` so the dev server can talk to a locally-running backend.
+Both the nginx image and the vite dev server proxy `/api/*` to the backend, so the app works from any device on the network without a hardcoded `localhost`. For `pnpm dev` on the host, the proxy targets `http://localhost:12000` (override with `VITE_PROXY_TARGET`); in the Docker dev overlay it targets `http://backend:12000`.
 
 ---
 

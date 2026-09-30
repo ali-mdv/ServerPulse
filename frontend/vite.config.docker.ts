@@ -13,6 +13,16 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    // Same-origin dev proxy: the browser calls /api/v1/... on this dev
+    // server and vite forwards to the backend container. Avoids baking a
+    // `localhost` URL into the app, so other LAN devices work too.
+    proxy: {
+      "/api": {
+        target: process.env.VITE_PROXY_TARGET || "http://backend:12000",
+        changeOrigin: true,
+        ws: true,
+      },
+    },
     fs: {
       allow: ["./src", "./shared", "./node_modules"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
