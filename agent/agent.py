@@ -38,7 +38,33 @@ import time
 import sys
 from typing import Any, Optional
 
-import requests
+try:
+    import requests
+except ImportError:
+    print(
+        "Error: missing required dependencies.\n"
+        "Install them first:\n"
+        "  pip install psutil requests\n"
+        "Optional extras:\n"
+        "  pip install docker                      # Docker container reporting\n"
+        "  pip install 'python-socketio[client]'   # remote control channel",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+try:
+    import psutil  # noqa: F401
+except ImportError:
+    print(
+        "Error: missing required dependency 'psutil'.\n"
+        "Install the required packages first:\n"
+        "  pip install psutil requests\n"
+        "Optional extras:\n"
+        "  pip install docker                      # Docker container reporting\n"
+        "  pip install 'python-socketio[client]'   # remote control channel",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def getenv(key: str, default: Optional[str] = None) -> Optional[str]:

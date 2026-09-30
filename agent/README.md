@@ -37,6 +37,9 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ## Python agent
 
+> **Warning:** install the required packages before running the agent. The
+> agent exits with an install hint if `psutil` or `requests` are missing.
+
 Install dependencies:
 
 ```bash
