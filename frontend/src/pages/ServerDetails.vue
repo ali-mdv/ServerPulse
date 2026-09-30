@@ -63,7 +63,17 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <div class="text-sm text-muted-foreground">CPU Usage</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">CPU Usage</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View CPU usage history"
+              @click="openHistory('cpu')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
           <div class="text-3xl font-bold mt-1">{{ cpu }}%</div>
           <div class="w-full bg-muted rounded-full h-2 mt-3">
             <div
@@ -74,7 +84,17 @@
         </Card>
 
         <Card>
-          <div class="text-sm text-muted-foreground">Memory Usage</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">Memory Usage</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View memory usage history"
+              @click="openHistory('memory')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
           <div class="text-3xl font-bold mt-1">{{ mem }}%</div>
           <div class="text-xs text-muted-foreground mt-1">
             {{ memUsed }} / {{ memTotal }}
@@ -88,7 +108,17 @@
         </Card>
 
         <Card>
-          <div class="text-sm text-muted-foreground">Disk Usage</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">Disk Usage</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View disk usage history"
+              @click="openHistory('disk')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
           <div class="text-3xl font-bold mt-1">{{ disk }}%</div>
           <div class="text-xs text-muted-foreground mt-1">
             {{ diskUsed }} / {{ diskTotal }}
@@ -102,7 +132,17 @@
         </Card>
 
         <Card>
-          <div class="text-sm text-muted-foreground">Network I/O</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm text-muted-foreground">Network I/O</div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="View network I/O history"
+              @click="openHistory('network')"
+            >
+              <History class="w-4 h-4" aria-hidden="true" />
+            </Button>
+          </div>
           <div class="text-lg font-bold mt-1">
             ↑ {{ netSent }} KB/s
           </div>
@@ -122,6 +162,7 @@
             :docker-available="dockerAvailable"
             :loading="servicesLoading"
             :server-id="id"
+            searchable
           />
         </div>
 
@@ -178,6 +219,13 @@
         </div>
       </div>
     </div>
+
+    <MetricHistoryModal
+      :visible="historyVisible"
+      :metric="historyMetric"
+      :server-id="id"
+      @update="historyVisible = $event"
+    />
   </div>
 </template>
 
@@ -185,10 +233,11 @@
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useRoute } from "vue-router";
 import { useToast } from "primevue/usetoast";
-import { ChevronLeft, Pencil, Key } from "lucide-vue-next";
+import { ChevronLeft, Pencil, Key, History } from "lucide-vue-next";
 import { fetchServer, generateServerApiKey, type Server } from "@/api/servers";
 import { fetchServicesState, fetchSystemState } from "@/api/state";
 import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
+import MetricHistoryModal from "@/components/MetricHistoryModal.vue";
 import Card from "@/components/Card.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import PageHeader from "@/components/ui/PageHeader.vue";
@@ -199,7 +248,7 @@ import {
   snapshotsToPM2Services,
   snapshotsToDockerContainers,
 } from "@/lib/service-snapshot";
-import { PM2Service, DockerContainer, ProviderState } from "@/types";
+import { PM2Service, DockerContainer, ProviderState, SystemMetricKey } from "@/types";
 
 const toast = useToast();
 const route = useRoute();
@@ -210,6 +259,14 @@ const loading = ref(true);
 const servicesLoading = ref(true);
 const apiKey = ref("");
 const generatingKey = ref(false);
+
+const historyVisible = ref(false);
+const historyMetric = ref<SystemMetricKey | null>(null);
+
+function openHistory(metric: SystemMetricKey) {
+  historyMetric.value = metric;
+  historyVisible.value = true;
+}
 
 const pm2State = ref<ProviderState>({ provider: "pm2", available: false, services: [], updatedAt: "" });
 const dockerState = ref<ProviderState>({ provider: "docker", available: false, services: [], updatedAt: "" });

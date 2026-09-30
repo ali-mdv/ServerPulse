@@ -78,7 +78,7 @@
           />
           <ul v-else class="divide-y divide-border">
             <li
-              v-for="alert in filteredAlerts"
+              v-for="alert in pagedAlerts"
               :key="alert.id"
               role="listitem"
               :class="[
@@ -158,6 +158,15 @@
           </ul>
         </div>
 
+        <Pagination
+          :page="page"
+          :total="filteredAlerts.length"
+          :page-size="pageSize"
+          aria-label="Notifications pagination"
+          class="px-4 py-2 border-t border-border"
+          @update:page="page = $event"
+        />
+
         <footer
           class="px-4 py-3 border-t border-border flex items-center justify-between"
         >
@@ -169,7 +178,7 @@
             View all alerts
           </router-link>
           <span class="text-xs text-muted-foreground">
-            Showing {{ filteredAlerts.length }} of {{ alerts.length }}
+            Showing {{ rangeStart }}–{{ rangeEnd }} of {{ filteredAlerts.length }}
           </span>
         </footer>
       </aside>
@@ -186,11 +195,15 @@ import Badge from "@/components/ui/Badge.vue";
 import Button from "@/components/ui/Button.vue";
 import Select from "@/components/ui/Select.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
+import Pagination from "@/components/ui/Pagination.vue";
 
 const panel = useNotificationsPanel();
 const store = useNotificationsStore();
 
 const filter = ref<"all" | "critical" | "warning" | "info">("all");
+
+const pageSize = 10;
+const page = ref(1);
 
 const alerts = computed(() =>
   store.items.map((n) => ({
@@ -207,6 +220,18 @@ const filteredAlerts = computed(() =>
   filter.value === "all"
     ? alerts.value
     : alerts.value.filter((a) => a.severity === filter.value),
+);
+
+const pagedAlerts = computed(() => {
+  const start = (page.value - 1) * pageSize;
+  return filteredAlerts.value.slice(start, start + pageSize);
+});
+
+const rangeStart = computed(() =>
+  filteredAlerts.value.length === 0 ? 0 : (page.value - 1) * pageSize + 1,
+);
+const rangeEnd = computed(() =>
+  Math.min(page.value * pageSize, filteredAlerts.value.length),
 );
 
 const unreadCount = computed(() => store.unreadCount);
@@ -246,4 +271,18 @@ async function markAllRead() {
 watch(panel.isOpen, (open) => {
   if (open) void store.load();
 });
+
+// Reset to the first page when the severity filter changes, and clamp the
+// current page when the underlying list shrinks.
+watch(filter, () => {
+  page.value = 1;
+});
+
+watch(
+  () => filteredAlerts.value.length,
+  (length) => {
+    const maxPage = Math.max(1, Math.ceil(length / pageSize));
+    if (page.value > maxPage) page.value = maxPage;
+  },
+);
 </script>

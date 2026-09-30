@@ -6,11 +6,29 @@
     />
 
     <div class="flex flex-wrap items-center gap-2">
+      <div class="relative">
+        <Search
+          class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          v-model="q"
+          aria-label="Search alerts"
+          placeholder="Search alerts"
+          class="pl-9 w-64"
+        />
+      </div>
       <Select v-model="severity" aria-label="Filter by severity" class="w-auto">
         <option value="all">All severities</option>
         <option value="critical">Critical</option>
         <option value="warning">Warning</option>
         <option value="info">Info</option>
+      </Select>
+      <Select v-model="status" aria-label="Filter by status" class="w-auto">
+        <option value="all">All statuses</option>
+        <option value="unresolved">Unresolved</option>
+        <option value="resolved">Resolved</option>
       </Select>
       <Input
         type="date"
@@ -70,7 +88,7 @@
 
 <script lang="ts" setup>
 import { ref, computed, onMounted } from "vue";
-import { Check } from "lucide-vue-next";
+import { Check, Search } from "lucide-vue-next";
 import Card from "@/components/Card.vue";
 import Badge from "@/components/ui/Badge.vue";
 import Button from "@/components/ui/Button.vue";
@@ -83,7 +101,9 @@ import { useNotificationsStore } from "@/stores/notifications";
 
 const store = useNotificationsStore();
 
+const q = ref("");
 const severity = ref("all");
+const status = ref("all");
 const from = ref("");
 const to = ref("");
 
@@ -91,6 +111,7 @@ const alerts = computed(() =>
   store.items.map((n) => ({
     id: n.id,
     title: n.title,
+    message: n.message ?? "",
     server: n.serverId,
     createdAt: n.createdAt,
     time: formatDateTime(n.createdAt),
@@ -99,17 +120,24 @@ const alerts = computed(() =>
   })),
 );
 
-const filtered = computed(() =>
-  alerts.value.filter((a) => {
+const filtered = computed(() => {
+  const term = q.value.trim().toLowerCase();
+  return alerts.value.filter((a) => {
+    if (term) {
+      const haystack = `${a.title} ${a.message} ${a.server}`.toLowerCase();
+      if (!haystack.includes(term)) return false;
+    }
     if (severity.value !== "all" && a.severity !== severity.value) return false;
+    if (status.value === "unresolved" && a.resolved) return false;
+    if (status.value === "resolved" && !a.resolved) return false;
 
     const ts = new Date(a.createdAt).getTime();
     if (Number.isNaN(ts)) return true;
     if (from.value && ts < startOfDay(from.value)) return false;
     if (to.value && ts > endOfDay(to.value)) return false;
     return true;
-  }),
-);
+  });
+});
 
 onMounted(() => {
   void store.load();

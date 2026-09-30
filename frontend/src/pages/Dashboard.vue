@@ -109,15 +109,6 @@
       </Card>
     </div>
 
-    <!-- Services List -->
-    <ServiceManagerPanel
-      :services="pm2Available ? pm2Services : []"
-      :pm2-available="pm2Available"
-      :containers="dockerAvailable ? dockerContainers : []"
-      :docker-available="dockerAvailable"
-      :loading="servicesLoading"
-    />
-
     <!-- High Usage Servers -->
     <section v-if="highUsageServers.length">
       <header class="flex items-center justify-between mb-3">
@@ -154,8 +145,7 @@ import { useToast } from "primevue/usetoast";
 import { Server, Activity, AlertTriangle, CircleSlash, LineChart } from "lucide-vue-next";
 import Card from "@/components/Card.vue";
 import { useSystemStore } from "@/stores/system";
-import { UsageInfo, NetIOInfo, PM2Service, DockerContainer } from "@/types";
-import ServiceManagerPanel from "@/components/ServiceManagerPanel.vue";
+import { UsageInfo, NetIOInfo } from "@/types";
 import Skeleton from "@/components/ui/Skeleton.vue";
 import Badge from "@/components/ui/Badge.vue";
 import Button from "@/components/ui/Button.vue";
@@ -163,10 +153,6 @@ import { useChartTheme } from "@/composables";
 import { fetchServers } from "@/api/servers";
 import { HistoryRange } from "@/api/history";
 import { withAlpha } from "@/lib/chart-theme";
-import {
-  snapshotsToPM2Services,
-  snapshotsToDockerContainers,
-} from "@/lib/service-snapshot";
 
 const toast = useToast();
 const systemStore = useSystemStore();
@@ -201,7 +187,6 @@ const topStats = computed(() => {
 
 const statsLoading = ref(true);
 const usageLoading = ref(true);
-const servicesLoading = ref(true);
 
 const cpuData = reactive({
   labels: Array(12).fill("-"),
@@ -584,11 +569,6 @@ function updateNetwork(io: NetIOInfo) {
   netReceivedLabels.value.push(time);
 }
 
-const pm2Services = ref<PM2Service[]>([]);
-const pm2Available = ref(true);
-const dockerContainers = ref<DockerContainer[]>([]);
-const dockerAvailable = ref(true);
-
 const highUsageServers = computed(() =>
   allServers.value
     .filter((s) => s.cpu >= 80 || s.mem >= 80)
@@ -608,20 +588,6 @@ async function loadSystemUsage() {
   } finally {
     usageLoading.value = false;
     statsLoading.value = false;
-  }
-}
-
-async function loadServicesState() {
-  try {
-    const { pm2, docker } = await systemStore.fetchServicesState();
-    pm2Services.value = snapshotsToPM2Services(pm2.services ?? []);
-    pm2Available.value = pm2.available;
-    dockerContainers.value = snapshotsToDockerContainers(docker.services ?? []);
-    dockerAvailable.value = docker.available;
-  } catch (err: any) {
-    toast.add({ severity: "error", summary: "Error", detail: err.message });
-  } finally {
-    servicesLoading.value = false;
   }
 }
 
@@ -680,9 +646,7 @@ onMounted(async () => {
   loadServers();
   await loadChartHistory();
   loadSystemUsage();
-  loadServicesState();
   setInterval(loadServers, systemStore.intervalMS * 6);
   setInterval(loadSystemUsage, systemStore.intervalMS);
-  setInterval(loadServicesState, systemStore.intervalMS);
 });
 </script>
