@@ -503,6 +503,11 @@ func main() {
 
 	log.Printf("ServerPulse agent starting: name=%s url=%s interval=%s", name, baseURL, interval)
 
+	// Control channel: receive start/stop/restart/logs from the backend
+	// over Socket.IO. Runs forever (with reconnect); push loop continues
+	// independently below.
+	go startControlChannel(baseURL, apiKey)
+
 	ns := &netSampler{}
 	for {
 		start := time.Now()

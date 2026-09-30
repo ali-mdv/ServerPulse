@@ -11,6 +11,7 @@
 - **System metrics:** `gopsutil` is the source. Don't shell out to `top`/`free`/etc.
 - **Docker control:** use the official `github.com/docker/docker/client` SDK (`client.FromEnv`). The backend container needs `/var/run/docker.sock` bind-mounted and the host's `docker` group added via `group_add` in `docker-compose.yml`.
 - **PM2 control:** never shell out to the `pm2` binary — the distroless image has no Node. `internal/services/pm2/` is a from-scratch Go client that speaks PM2's AMP + axon-rpc protocol directly over the daemon's unix socket (see "PM2 wire protocol" below).
+- **Agent control channel:** remote start/stop/restart/logs go through Socket.IO (`internal/services/agent_hub.go` + `agent_socket.go`) mounted at `/api/v1/agents/socket.io`. `CommandService` (`command_service.go`) branches local vs remote by `serverID`; routes live under `/servers/:serverId/...` (`routes/v1/server_control.go`). The hub blocks on the agent's ack (10s actions / 20s logs) and maps failures to 503/504/502 via `resultToError`.
 - **Mongo:** `pkg/mongo` owns the client. Get collections via `database.GetCollection(name)`.
 
 ### PM2 wire protocol (internal/services/pm2/)
@@ -37,3 +38,4 @@ If PM2's daemon is down, `Dial` fails and the service keeps the error to surface
 
 - Don't bypass the layered structure (handler → service → repository) in the backend.
 - Don't reinstall Node or the `pm2` binary inside the backend image — the whole point of `internal/services/pm2/` is to talk to the host's PM2 without installing anything in the container. If you need a new PM2 operation, extend `internal/services/pm2/client.go` using the existing transport.
+- Don't shell out from the agent control channel — `agent/control.go` must use the Docker SDK and the PM2 axon-rpc client, same as the backend.

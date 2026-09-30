@@ -117,7 +117,7 @@ import Button from "@/components/ui/Button.vue";
 
 const props = defineProps<{
   container: DockerContainer;
-  /** Scopes the History link so the detail page queries the right server. */
+  /** Scopes History links and remote control actions. */
   serverId?: string;
 }>();
 
@@ -187,7 +187,7 @@ async function handleAction(action: ServiceAction) {
 
   try {
     if (action === ServiceAction.START) {
-      await systemStore.startDockerContainer(props.container);
+      await systemStore.startDockerContainer(props.container, props.serverId);
       toast.add({
         severity: "success",
         summary: "Started",
@@ -195,7 +195,7 @@ async function handleAction(action: ServiceAction) {
         life: 3000,
       });
     } else if (action === ServiceAction.STOP) {
-      await systemStore.stopDockerContainer(props.container);
+      await systemStore.stopDockerContainer(props.container, props.serverId);
       toast.add({
         severity: "success",
         summary: "Stopped",
@@ -203,7 +203,7 @@ async function handleAction(action: ServiceAction) {
         life: 3000,
       });
     } else if (action === ServiceAction.RESTART) {
-      await systemStore.restartDockerContainer(props.container);
+      await systemStore.restartDockerContainer(props.container, props.serverId);
       toast.add({
         severity: "success",
         summary: "Restarted",
@@ -212,7 +212,10 @@ async function handleAction(action: ServiceAction) {
       });
     } else if (action === ServiceAction.LOGS) {
       logsLoading.value = true;
-      const logs = await systemStore.getContainerLogs(props.container);
+      const logs = await systemStore.getContainerLogs(
+        props.container,
+        props.serverId,
+      );
       logsContent.value = logs;
       toast.add({
         severity: "success",

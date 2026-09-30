@@ -6,8 +6,8 @@
 #
 # Frontend:   http://localhost:8080  (vite dev server, HMR)
 # Backend:    http://localhost:12000 (air hot-reload)
-# VITE_SERVER_ADDRESS is injected at runtime so the browser talks to the
-# host-published backend directly (vite has no nginx-style /api proxy).
+# The vite dev server proxies /api/* to the backend service, so requests
+# are same-origin and the app is reachable from other devices on the LAN.
 name: serverpulse-dev
 
 services:
@@ -50,7 +50,9 @@ services:
     image: serverpulse/frontend-dev:${FRONTEND_VERSION:-dev}
     environment:
       - GIN_MODE=debug
-      - VITE_SERVER_ADDRESS=http://localhost:12000
+      # Same-origin: vite proxies /api/* to the backend container.
+      - VITE_SERVER_ADDRESS=
+      - VITE_PROXY_TARGET=http://backend:12000
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api/v1}
       - VITE_API_TIME_OUT=${VITE_API_TIME_OUT:-10000}
       - VITE_ENVIRONMENT=${VITE_ENVIRONMENT:-development}

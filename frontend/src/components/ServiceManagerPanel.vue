@@ -56,7 +56,7 @@ const props = defineProps<{
   pm2Available?: boolean;
   dockerAvailable?: boolean;
   loading?: boolean;
-  /** Scopes the per-service History links. Omit for the local server. */
+  /** Scopes History links and remote control actions. Omit for the local server. */
   serverId?: string;
 }>();
 </script>

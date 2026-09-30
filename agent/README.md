@@ -43,6 +43,8 @@ Install dependencies:
 pip install psutil requests
 # Optional, for Docker container reporting:
 pip install docker
+# Optional, for the Socket.IO control channel (remote start/stop/restart/logs):
+pip install 'python-socketio[client]'
 ```
 
 Run:
@@ -51,6 +53,10 @@ Run:
 source .env
 python agent.py
 ```
+
+When `python-socketio` is installed, the agent also opens a control channel
+to `/api/v1/agents/socket.io` (auth: `SERVER_PULSE_API_KEY`) and executes
+start/stop/restart/logs for Docker containers and PM2 processes on demand.
 
 ## Go agent
 
@@ -68,6 +74,10 @@ Run:
 source .env
 ./serverpulse-agent
 ```
+
+The Go agent also opens a Socket.IO control channel to `/api/v1/agents/socket.io`
+(auth: `SERVER_PULSE_API_KEY` in the handshake `auth` payload) and executes
+start/stop/restart/logs for Docker containers and PM2 processes on demand.
 
 ## Collected metrics
 
